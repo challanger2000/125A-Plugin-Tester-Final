@@ -1,0 +1,83 @@
+name: Import tested source and build complete package
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/import-source-and-package.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  import-and-package:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone verified source snapshot
+        shell: pwsh
+        run: |
+          git clone https://github.com/challanger2000/125A-Plugin-Tester.git source-temp
+          Set-Location source-temp
+          git checkout 5f534842dc47ddc47005e5225a1e61bd7efaba22
+          Set-Location ..
+
+      - name: Copy complete source project
+        shell: pwsh
+        run: |
+          Copy-Item source-temp\CMakeLists.txt . -Force
+          Copy-Item source-temp\src .\src -Recurse -Force
+          Copy-Item source-temp\tests .\tests -Recurse -Force
+          New-Item -ItemType Directory -Path .github\workflows -Force | Out-Null
+          Copy-Item source-temp\.github\workflows\build-windows.yml .github\workflows\build-windows.yml -Force
+          Copy-Item source-temp\README.md SOURCE-README.md -Force
+          Remove-Item source-temp -Recurse -Force
+
+      - name: Build complete release ZIP and verify
+        shell: pwsh
+        run: |
+          $zip = 'dist\125A-Plugin-Tester-v0.2.0-Windows-x64.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          New-Item -ItemType Directory -Path package-root -Force | Out-Null
+          Copy-Item 125A_Plugin_Tester.exe package-root\ -Force
+          Copy-Item README.md package-root\ -Force
+          Copy-Item SOURCE-README.md package-root\ -Force
+          Copy-Item LICENSE-NOTE.txt package-root\ -Force
+          Copy-Item CMakeLists.txt package-root\ -Force
+          Copy-Item src package-root\src -Recurse -Force
+          Copy-Item tests package-root\tests -Recurse -Force
+          Copy-Item docs package-root\docs -Recurse -Force
+          New-Item -ItemType Directory -Path package-root\.github\workflows -Force | Out-Null
+          Copy-Item .github\workflows\build-windows.yml package-root\.github\workflows\build-windows.yml -Force
+          Compress-Archive -Path package-root\* -DestinationPath $zip -Force
+          Remove-Item package-root -Recurse -Force
+
+          New-Item -ItemType Directory -Path verify -Force | Out-Null
+          Expand-Archive -Path $zip -DestinationPath verify -Force
+          $required = @(
+            'verify\125A_Plugin_Tester.exe',
+            'verify\README.md',
+            'verify\SOURCE-README.md',
+            'verify\LICENSE-NOTE.txt',
+            'verify\CMakeLists.txt',
+            'verify\src\main.cpp',
+            'verify\src\launcher.cpp',
+            'verify\tests\qa_fixture.cpp',
+            'verify\docs\125A_Plugin_Tester_Handbuch_DE.pdf',
+            'verify\docs\125A_Plugin_Tester_User_Guide_EN.pdf',
+            'verify\.github\workflows\build-windows.yml'
+          )
+          foreach ($f in $required) { if (!(Test-Path $f)) { throw "Missing from ZIP: $f" } }
+          $sourceCount = (Get-ChildItem verify\src -File).Count
+          if ($sourceCount -lt 20) { throw "Source tree incomplete: only $sourceCount files" }
+          Remove-Item verify -Recurse -Force
+
+      - name: Commit complete final project
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt src tests SOURCE-README.md .github\workflows\build-windows.yml dist\125A-Plugin-Tester-v0.2.0-Windows-x64.zip
+          git commit -m "Add verified source project and complete release ZIP"
+          git pull --rebase origin main
+          git push origin HEAD:main
