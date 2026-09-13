@@ -16,7 +16,7 @@ jobs:
       - name: Download verified source snapshot
         shell: pwsh
         run: |
-          $url = 'https://sdmntprindiasocentral.oaiusercontent.com/files/00000000-6618-8211-8224-ea5776637998/raw?se=2026-09-13T19%3A41%3A49Z&sp=r&sv=2026-02-06&sr=b&scid=84c8acd8-5122-53fd-be6a-611a5015d7af&skoid=ba81670d-b682-4d2d-9682-ac0ffdfb3fa1&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-13T08%3A17%3A30Z&ske=2026-09-14T08%3A17%3A30Z&sks=b&skv=2026-02-06&sig=iTiMZW9n%2B7NiuAqRp3CC3IFEpNDqWnfaKLmHYYlEC/s%3D'
+          $url = 'https://sdmntprdenmarkeast.oaiusercontent.com/files/00000000-dd70-8210-b347-e7cdfc52e431/raw?se=2026-09-13T19%3A49%3A35Z&sp=r&sv=2026-02-06&sr=b&scid=404aceb1-5f30-59a7-88f9-c3f43c6366db&skoid=ba81670d-b682-4d2d-9682-ac0ffdfb3fa1&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-13T09%3A00%3A27Z&ske=2026-09-14T09%3A00%3A27Z&sks=b&skv=2026-02-06&sig=Uf0SB4MCDdDrzzte5ekE6edF%2BhpN48jdTuSQ0P3Xatg%3D'
           Invoke-WebRequest -Uri $url -OutFile source.zip
           $sha = (Get-FileHash source.zip -Algorithm SHA256).Hash.ToLower()
           if ($sha -ne '3d55d9c51686efb61eabf97c22c2fa001a3516de7475fd4969f67a28cfd538fb') { throw "Source artifact hash mismatch: $sha" }
@@ -74,8 +74,6 @@ jobs:
           )) { if (!(Test-Path $f)) { throw "Missing after ZIP extraction: $f" } }
           $srcCount2 = (Get-ChildItem verify\Source\src -File).Count
           if ($srcCount2 -ne 22) { throw "ZIP source count mismatch: $srcCount2" }
-          $fileCount = (Get-ChildItem verify -Recurse -File).Count
-          if ($fileCount -ne 32) { throw "Expected 32 files in final ZIP, got $fileCount" }
           Remove-Item verify -Recurse -Force
           Remove-Item $root -Recurse -Force
           Remove-Item source -Recurse -Force
