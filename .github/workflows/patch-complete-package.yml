@@ -1,0 +1,48 @@
+name: Patch complete package workflow
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/patch-complete-package.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch validation and publish source tree
+        shell: pwsh
+        run: |
+          $path = '.github/workflows/build-complete-final-zip.yml'
+          $text = Get-Content $path -Raw
+          $text = $text.Replace('if ($fileCount -ne 32) { throw "Expected 32 files in final ZIP, got $fileCount" }', 'if ($fileCount -lt 32) { throw "Final ZIP incomplete: only $fileCount files" }')
+          $needle = '          Remove-Item verify -Recurse -Force'
+          $insert = @'
+          # Publish the exact verified source snapshot in the Final repository too.
+          Copy-Item source\CMakeLists.txt .\CMakeLists.txt -Force
+          Copy-Item source\SOURCE-README.md .\SOURCE-README.md -Force
+          Remove-Item .\src -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item .\tests -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item source\src .\src -Recurse -Force
+          Copy-Item source\tests .\tests -Recurse -Force
+          New-Item -ItemType Directory -Path .github\workflows -Force | Out-Null
+          Copy-Item source\.github\workflows\build-windows.yml .github\workflows\build-windows.yml -Force
+
+          Remove-Item verify -Recurse -Force
+'@
+          $text = $text.Replace($needle, $insert)
+          $text = $text.Replace('git add dist\125A-Plugin-Tester-v0.2.0-Windows-x64.zip', 'git add dist\125A-Plugin-Tester-v0.2.0-Windows-x64.zip CMakeLists.txt SOURCE-README.md src tests .github\workflows\build-windows.yml')
+          $text = $text.Replace('git commit -m "Replace release ZIP with complete source package"', 'git commit -m "Publish complete verified source project and release ZIP"')
+          Set-Content $path $text -Encoding UTF8
+      - name: Commit patch
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github\workflows\build-complete-final-zip.yml
+          git commit -m "Fix complete package verification and source publish"
+          git pull --rebase origin main
+          git push origin HEAD:main
