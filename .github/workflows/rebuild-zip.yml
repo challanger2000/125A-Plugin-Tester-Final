@@ -13,18 +13,40 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
-      - name: Rebuild ZIP with 7-Zip and verify
+      - name: Rebuild ZIP with Python and verify
         shell: pwsh
         run: |
-          $zip = 'dist\125A-Plugin-Tester-v0.2.0-Windows-x64.zip'
-          if (Test-Path $zip) { Remove-Item $zip -Force }
-          7z a -tzip $zip 125A_Plugin_Tester.exe docs\125A_Plugin_Tester_Handbuch_DE.pdf docs\125A_Plugin_Tester_User_Guide_EN.pdf
-          7z t $zip
+          @'
+          import zipfile, pathlib, shutil
+          root = pathlib.Path('.')
+          zip_path = root / 'dist' / '125A-Plugin-Tester-v0.2.0-Windows-x64.zip'
+          zip_path.parent.mkdir(exist_ok=True)
+          if zip_path.exists(): zip_path.unlink()
+          files = [
+              root/'125A_Plugin_Tester.exe',
+              root/'docs'/'125A_Plugin_Tester_Handbuch_DE.pdf',
+              root/'docs'/'125A_Plugin_Tester_User_Guide_EN.pdf',
+          ]
+          for f in files:
+              if not f.exists(): raise SystemExit(f'Missing input: {f}')
+          with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+              for f in files:
+                  z.write(f, arcname=f.name)
+          with zipfile.ZipFile(zip_path, 'r') as z:
+              bad = z.testzip()
+              if bad is not None: raise SystemExit(f'CRC failure: {bad}')
+              names = set(z.namelist())
+              expected = {f.name for f in files}
+              if names != expected: raise SystemExit(f'Unexpected ZIP contents: {names}')
+          print(f'ZIP verified by Python: {zip_path} ({zip_path.stat().st_size} bytes)')
+          '@ | Set-Content rebuild_zip.py -Encoding UTF8
+          python rebuild_zip.py
+          Remove-Item rebuild_zip.py
           New-Item -ItemType Directory -Path zip-test -Force | Out-Null
-          Expand-Archive -Path $zip -DestinationPath zip-test -Force
-          if (!(Test-Path 'zip-test\125A_Plugin_Tester.exe')) { throw 'EXE missing after extraction' }
-          if (!(Test-Path 'zip-test\125A_Plugin_Tester_Handbuch_DE.pdf')) { throw 'DE PDF missing after extraction' }
-          if (!(Test-Path 'zip-test\125A_Plugin_Tester_User_Guide_EN.pdf')) { throw 'EN PDF missing after extraction' }
+          Expand-Archive -Path 'dist\125A-Plugin-Tester-v0.2.0-Windows-x64.zip' -DestinationPath zip-test -Force
+          if (!(Test-Path 'zip-test\125A_Plugin_Tester.exe')) { throw 'Windows extraction: EXE missing' }
+          if (!(Test-Path 'zip-test\125A_Plugin_Tester_Handbuch_DE.pdf')) { throw 'Windows extraction: DE PDF missing' }
+          if (!(Test-Path 'zip-test\125A_Plugin_Tester_User_Guide_EN.pdf')) { throw 'Windows extraction: EN PDF missing' }
           Remove-Item zip-test -Recurse -Force
       - name: Commit verified ZIP
         shell: pwsh
