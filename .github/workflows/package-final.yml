@@ -1,0 +1,77 @@
+name: Package final release
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/package-final.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PDF dependency
+        run: python -m pip install reportlab
+      - name: Create manuals and ZIP
+        shell: pwsh
+        run: |
+          @'
+          from reportlab.lib.pagesizes import A4
+          from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+          from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+          from reportlab.lib.enums import TA_CENTER
+          from reportlab.lib import colors
+          from reportlab.lib.units import mm
+          from pathlib import Path
+
+          styles=getSampleStyleSheet()
+          styles.add(ParagraphStyle(name='T', parent=styles['Title'], fontName='Helvetica-Bold', fontSize=22, leading=26, alignment=TA_CENTER, spaceAfter=10))
+          styles.add(ParagraphStyle(name='S', parent=styles['Normal'], fontSize=10, leading=14, alignment=TA_CENTER, textColor=colors.HexColor('#555555'), spaceAfter=16))
+          styles.add(ParagraphStyle(name='H', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=13, leading=17, spaceBefore=9, spaceAfter=5))
+          styles.add(ParagraphStyle(name='B', parent=styles['BodyText'], fontSize=9.3, leading=13.5, spaceAfter=6))
+
+          def pdf(path,de):
+              if de:
+                  title='125A Plugin Tester - Benutzerhandbuch'; sub='Version 0.2.0 - Windows x64 - Verifizierter Build #61'
+                  sec=[
+                  ('Ueberblick','Technisches QA- und Release-Pruefwerkzeug fuer VST3-Plugins unter Windows. Es kombiniert eigene Struktur-, Zustands-, Processing-, I/O- und Belastungstests mit dem offiziellen Steinberg VST3 Validator und erzeugt TXT- und JSON-Berichte.'),
+                  ('Verwendung','<b>1.</b> 125A_Plugin_Tester.exe starten.<br/><b>2.</b> VST3-Plugin auswaehlen.<br/><b>3.</b> Test vollstaendig durchlaufen lassen.<br/><b>4.</b> PASS, WARNING, FAIL und Release-Empfehlung im Bericht auswerten.'),
+                  ('Windows-Warnung / fehlende Code-Signatur','Die aktuelle EXE ist nicht mit einem oeffentlich vertrauenswuerdigen Windows-Code-Signing-Zertifikat signiert. Windows kann deshalb SmartScreen bzw. Unbekannter Herausgeber anzeigen. Das bedeutet fuer sich allein nicht, dass die Datei Schadsoftware enthaelt.'),
+                  ('Aktuelle Behebung','Nur bei Download aus dem offiziellen 125A-Repository: SmartScreen -> <b>Weitere Informationen</b> -> <b>Trotzdem ausfuehren</b>, sofern angeboten. Alternativ Rechtsklick -> Eigenschaften -> Sicherheit -> <b>Zulassen/Entsperren</b>. Fuer bewusst gepruefte Dateien kann PowerShell verwendet werden: <b>Unblock-File -Path .\\125A_Plugin_Tester.exe</b>.'),
+                  ('Dauerhafte Behebung','Die saubere Loesung ist eine Authenticode-Code-Signatur mit oeffentlich vertrauenswuerdiger Herausgeberidentitaet, z. B. per OV/EV-Code-Signing-Zertifikat oder Microsoft Artifact Signing, sofern verfuegbar. Die Release-EXE sollte nach dem Build mit SHA-256 signiert und RFC-3161-zeitgestempelt werden. Die Signatur sollte vor Upload geprueft werden. SmartScreen-Reputation kann trotz gueltiger Signatur bei neuen Dateien zusaetzlich aufgebaut werden muessen.'),
+                  ('Verifizierter Referenztest','Die absichtlich fehlerhafte BadIO-Test-VST3 wurde vom 125A I/O-Probe korrekt mit <b>Bus arrangement - out-of-range bus index was accepted</b> erkannt, waehrend dieselbe Fixture alle 47 Steinberg-Validator-Tests bestand.'),
+                  ('Lizenz','Dieses Projekt verwendet das Steinberg VST3 SDK gemaess dessen geltenden Lizenzbedingungen. 125A-Projektquellcode: alle Rechte vorbehalten, sofern nicht ausdruecklich anders angegeben.')]
+              else:
+                  title='125A Plugin Tester - User Guide'; sub='Version 0.2.0 - Windows x64 - Verified Build #61'
+                  sec=[
+                  ('Overview','Technical QA and release-checking tool for VST3 plug-ins on Windows. It combines custom structure, state, processing, I/O and stress tests with the official Steinberg VST3 Validator and produces TXT and JSON reports.'),
+                  ('Usage','<b>1.</b> Start 125A_Plugin_Tester.exe.<br/><b>2.</b> Select the VST3 plug-in.<br/><b>3.</b> Let the complete test finish.<br/><b>4.</b> Review PASS, WARNING, FAIL and the release recommendation.'),
+                  ('Windows warning / missing code signature','The current EXE is not signed with a publicly trusted Windows code-signing certificate. Windows may therefore show SmartScreen or Unknown publisher. That warning alone does not mean the file contains malware.'),
+                  ('Current workaround','Only for a download from the official 125A repository: SmartScreen -> <b>More info</b> -> <b>Run anyway</b>, if offered. Alternatively right-click -> Properties -> Security -> <b>Unblock</b>. For an intentionally verified file, PowerShell can use: <b>Unblock-File -Path .\\125A_Plugin_Tester.exe</b>.'),
+                  ('Permanent fix','The proper long-term solution is an Authenticode code signature backed by a publicly trusted publisher identity, for example an OV/EV code-signing certificate or Microsoft Artifact Signing where available. The release EXE should be SHA-256 signed and RFC-3161 timestamped after the build, and the signature verified before upload. SmartScreen reputation may still need time to build for new files.'),
+                  ('Verified reference test','The intentionally faulty BadIO VST3 fixture was correctly detected by the 125A I/O probe as <b>Bus arrangement - out-of-range bus index was accepted</b>, while the same fixture passed all 47 Steinberg Validator tests.'),
+                  ('License','This project uses the Steinberg VST3 SDK under its applicable licensing terms. 125A project source code: all rights reserved unless explicitly stated otherwise.')]
+              story=[Paragraph(title,styles['T']),Paragraph(sub,styles['S'])]
+              for h,b in sec: story += [Paragraph(h,styles['H']),Paragraph(b,styles['B'])]
+              SimpleDocTemplate(str(path),pagesize=A4,rightMargin=18*mm,leftMargin=18*mm,topMargin=16*mm,bottomMargin=16*mm,title=title,author='125A').build(story)
+
+          Path('docs').mkdir(exist_ok=True)
+          Path('dist').mkdir(exist_ok=True)
+          pdf(Path('docs/125A_Plugin_Tester_Handbuch_DE.pdf'),True)
+          pdf(Path('docs/125A_Plugin_Tester_User_Guide_EN.pdf'),False)
+          '@ | Set-Content make_manuals.py -Encoding UTF8
+          python make_manuals.py
+          Remove-Item make_manuals.py
+          Compress-Archive -Path 125A_Plugin_Tester.exe,docs\125A_Plugin_Tester_Handbuch_DE.pdf,docs\125A_Plugin_Tester_User_Guide_EN.pdf -DestinationPath dist\125A-Plugin-Tester-v0.2.0-Windows-x64.zip -Force
+      - name: Commit package
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs dist
+          git commit -m "Add v0.2.0 manuals and Windows package"
+          git pull --rebase origin main
+          git push origin HEAD:main
