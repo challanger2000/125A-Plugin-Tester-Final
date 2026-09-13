@@ -1,3 +1,4 @@
+# Import the exact verified artifact from development run #61.
 name: Import verified build 61
 
 on:
