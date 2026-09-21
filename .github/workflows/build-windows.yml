@@ -2,6 +2,9 @@ name: Build 125A Plugin Tester
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 0.2.6
 
 jobs:
   build:
