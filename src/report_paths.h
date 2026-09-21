@@ -74,6 +74,9 @@ inline std::wstring normalizedIdentity(const fs::path& pluginPath) {
 }
 
 inline std::wstring stablePathHash(const fs::path& pluginPath) {
+    // FNV-1a over normalized, case-folded Windows path code units. This is
+    // deterministic across runs and prevents same-stem plug-ins from
+    // overwriting each other's reports during a complete VST3 folder scan.
     std::uint64_t hash = 14695981039346656037ull;
     for (const wchar_t ch : normalizedIdentity(pluginPath)) {
         hash ^= static_cast<std::uint32_t>(ch);
@@ -89,13 +92,40 @@ inline std::wstring baseName(const fs::path& pluginPath) {
     return pluginPath.stem().wstring() + L"_" + stablePathHash(pluginPath);
 }
 
-inline fs::path qa(const fs::path& pluginPath) { return root() / (baseName(pluginPath) + L"_125A_QA_Report.txt"); }
-inline fs::path guard(const fs::path& pluginPath) { return root() / (baseName(pluginPath) + L"_125A_QA_Guard_Report.txt"); }
-inline fs::path validator(const fs::path& pluginPath) { return root() / (baseName(pluginPath) + L"_125A_Steinberg_Validator.txt"); }
-inline fs::path ioEvent(const fs::path& pluginPath) { return root() / (baseName(pluginPath) + L"_125A_IO_Event_Probe.txt"); }
-inline fs::path json(const fs::path& pluginPath) { return root() / (baseName(pluginPath) + L"_125A_QA_Report.json"); }
-inline fs::path folderSummaryTxt() { return root() / L"125A_Folder_Scan_Summary.txt"; }
-inline fs::path folderSummaryJson() { return root() / L"125A_Folder_Scan_Summary.json"; }
-inline fs::path folderProgressTxt() { return root() / L"125A_Folder_Scan_Progress.txt"; }
+inline fs::path qa(const fs::path& pluginPath) {
+    return root() / (baseName(pluginPath) + L"_125A_QA_Report.txt");
+}
+
+inline fs::path guard(const fs::path& pluginPath) {
+    return root() / (baseName(pluginPath) + L"_125A_QA_Guard_Report.txt");
+}
+
+inline fs::path validator(const fs::path& pluginPath) {
+    return root() / (baseName(pluginPath) + L"_125A_Steinberg_Validator.txt");
+}
+
+inline fs::path ioEvent(const fs::path& pluginPath) {
+    return root() / (baseName(pluginPath) + L"_125A_IO_Event_Probe.txt");
+}
+
+inline fs::path editorLifecycle(const fs::path& pluginPath) {
+    return root() / (baseName(pluginPath) + L"_125A_Editor_Lifecycle_Probe.txt");
+}
+
+inline fs::path json(const fs::path& pluginPath) {
+    return root() / (baseName(pluginPath) + L"_125A_QA_Report.json");
+}
+
+inline fs::path folderSummaryTxt() {
+    return root() / L"125A_Folder_Scan_Summary.txt";
+}
+
+inline fs::path folderSummaryJson() {
+    return root() / L"125A_Folder_Scan_Summary.json";
+}
+
+inline fs::path folderProgressTxt() {
+    return root() / L"125A_Folder_Scan_Progress.txt";
+}
 
 } // namespace ReportPaths

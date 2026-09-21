@@ -1,0 +1,229 @@
+name: Build 125A Plugin Tester
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DSMTG_CREATE_PLUGIN_LINK=0
+
+      - name: Build
+        run: cmake --build build --config Release --target PluginTester125ADispatcher PluginTester125AGui PluginTester125APortableStub PluginTester125AHelperPacker PluginTester125ALauncher PluginTester125AWorker PluginTester125AReloadProbe PluginTester125AStateProbe PluginTester125AEditorLifecycleProbe PluginTester125AIOEventProbe PluginTester125AValidatorWrapper PluginTester125AGuardSelfTest validator PluginTester125AQAGoodControl PluginTester125AQABadLifecycle PluginTester125AQABadNaN PluginTester125AQABadState PluginTester125AQABadIO PluginTester125AQAGoodEditor PluginTester125AQABadEditor --parallel
+
+      - name: Verify production Job Object guard
+        shell: pwsh
+        run: |
+          $launcher = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester.exe | Select-Object -First 1
+          $single = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_Single.exe | Select-Object -First 1
+          $helper = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_GuardSelfTest.exe | Select-Object -First 1
+          if (-not $launcher) { throw "125A_Plugin_Tester.exe not found" }
+          if (-not $single) { throw "125A_Plugin_Tester_Single.exe not found" }
+          if (-not $helper) { throw "125A_Plugin_Tester_GuardSelfTest.exe not found" }
+          & $launcher.FullName --guard-selftest $helper.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Production launcher guard self-test failed with exit code $LASTEXITCODE" }
+
+      - name: Verify Steinberg validator self-test
+        shell: pwsh
+        run: |
+          $validator = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_SteinbergValidator.exe | Select-Object -First 1
+          $validatorCore = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_SteinbergValidatorCore.exe | Select-Object -First 1
+          if (-not $validator) { throw "125A_Plugin_Tester_SteinbergValidator.exe not found" }
+          if (-not $validatorCore) { throw "125A_Plugin_Tester_SteinbergValidatorCore.exe not found" }
+          & $validator.FullName -selftest
+          if ($LASTEXITCODE -ne 0) { throw "Steinberg validator self-test failed with exit code $LASTEXITCODE" }
+
+      - name: Verify tester specificity, sensitivity and JSON with VST3 fixtures
+        shell: pwsh
+        run: |
+          $launcher = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester.exe | Select-Object -First 1
+          if (-not $launcher) { throw "125A_Plugin_Tester.exe not found" }
+
+          $env:125A_PLUGIN_TESTER_REPORT_DIR = Join-Path (Get-Location) "build\qa-reports"
+          Remove-Item $env:125A_PLUGIN_TESTER_REPORT_DIR -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $env:125A_PLUGIN_TESTER_REPORT_DIR | Out-Null
+
+          function Find-Fixture([string]$name) {
+            $f = Get-ChildItem build -Recurse -Directory -Filter "$name.vst3" | Select-Object -First 1
+            if (-not $f) { throw "$name.vst3 fixture not found" }
+            return $f
+          }
+          function Find-Report([string]$stem, [string]$suffix) {
+            Get-ChildItem $env:125A_PLUGIN_TESTER_REPORT_DIR -File -Filter "${stem}_*${suffix}" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          function Dump-FixtureDiagnostics([string]$stem) {
+            Write-Host "----- BEGIN 125A FIXTURE DIAGNOSTICS -----"
+            foreach ($file in (Get-ChildItem $env:125A_PLUGIN_TESTER_REPORT_DIR -File -Filter "${stem}_*" -ErrorAction SilentlyContinue)) {
+              Write-Host "===== $($file.FullName) ====="
+              Get-Content $file.FullName -Raw | Write-Host
+            }
+            Write-Host "----- END 125A FIXTURE DIAGNOSTICS -----"
+          }
+          function Run-Fixture([string]$name, [int]$expectedExit, [string]$expectedStatus, [string]$requiredReportText, [string]$requiredIoText = "", [string]$requiredEditorText = "") {
+            $fixture = Find-Fixture $name
+            $stem = [System.IO.Path]::GetFileNameWithoutExtension($fixture.Name)
+            Write-Host "Running production tester against $($fixture.FullName)"
+            & $launcher.FullName $fixture.FullName
+            $actual = $LASTEXITCODE
+            $guard = Find-Report $stem "_125A_QA_Guard_Report.txt"
+            $report = Find-Report $stem "_125A_QA_Report.txt"
+            $json = Find-Report $stem "_125A_QA_Report.json"
+            $ioProbe = Find-Report $stem "_125A_IO_Event_Probe.txt"
+            $editorProbe = Find-Report $stem "_125A_Editor_Lifecycle_Probe.txt"
+            if ($actual -ne $expectedExit) { Dump-FixtureDiagnostics $stem; throw "$name returned launcher exit $actual; expected $expectedExit" }
+            if ($guard) { Dump-FixtureDiagnostics $stem; throw "$name produced a guard/inconclusive report during a deterministic fixture test" }
+            if (-not $report) { Dump-FixtureDiagnostics $stem; throw "$name did not produce the expected QA report" }
+            if (-not $json) { Dump-FixtureDiagnostics $stem; throw "$name did not produce the expected JSON report" }
+            if (-not $ioProbe) { Dump-FixtureDiagnostics $stem; throw "$name did not produce the structured I/O/event probe report" }
+            if (-not $editorProbe) { Dump-FixtureDiagnostics $stem; throw "$name did not produce the structured editor lifecycle probe report" }
+            $reportText = Get-Content $report.FullName -Raw
+            if (-not $reportText.Contains($requiredReportText)) { Dump-FixtureDiagnostics $stem; throw "$name report did not contain expected evidence: $requiredReportText" }
+            $ioText = Get-Content $ioProbe.FullName -Raw
+            if (-not $ioText.Contains("ExitCode: ") -or -not $ioText.Contains("Result: ") -or -not $ioText.Contains("FirstFailure: ")) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe report is missing structured fields" }
+            if ($ioText.Contains("Result: FAIL") -and $ioText.Contains("FirstFailure: None")) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe reported FAIL without a concrete first failure" }
+            if ($requiredIoText -and -not $ioText.Contains($requiredIoText)) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe did not contain expected evidence: $requiredIoText" }
+            $editorText = Get-Content $editorProbe.FullName -Raw
+            if (-not $editorText.Contains("Version: 0.2.6")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
+            if ($requiredEditorText -and -not $editorText.Contains($requiredEditorText)) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe did not contain expected evidence: $requiredEditorText" }
+            $jsonData = Get-Content $json.FullName -Raw | ConvertFrom-Json
+            if ($jsonData.schemaVersion -ne 1) { throw "$name JSON schemaVersion was not 1" }
+            if ($jsonData.status -ne $expectedStatus) { throw "$name JSON status $($jsonData.status); expected $expectedStatus" }
+            if ($jsonData.pluginPath -ne $fixture.FullName) { throw "$name JSON pluginPath mismatch" }
+            if (-not $jsonData.pluginId) { throw "$name JSON pluginId missing" }
+            Write-Host "[PASS] $name returned expected exit/status and produced matching TXT + JSON + structured I/O evidence"
+          }
+
+          Run-Fixture "125A_QA_GoodControl" 0 "PASS" "0 WARNING / 0 FAIL" "Result: PASS"
+          Run-Fixture "125A_QA_BadLifecycle" 1 "FAIL" "[FAIL] Audio torture processing state (32-bit) - setProcessing(true) failed"
+          Run-Fixture "125A_QA_BadNaN" 1 "FAIL" "[FAIL] Audio Silence process (32-bit)"
+          Run-Fixture "125A_QA_BadState" 1 "FAIL" "[FAIL] Component state roundtrip - setState rejected the state returned by getState"
+          Run-Fixture "125A_QA_BadIO" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "[FAIL] Bus arrangement - out-of-range bus index was accepted"
+          Run-Fixture "125A_QA_GoodEditor" 0 "PASS" "[PASS] Editor lifecycle / GUI runtime" "" "Result: PASS"
+          Run-Fixture "125A_QA_BadEditor" 1 "FAIL" "last reached stage: class 125A QA Bad Editor - cycle 2 - removed" "" "Stage: class 125A QA Bad Editor - cycle 2 - removed"
+          Write-Host "VST3 fixture QA PASS"
+          exit 0
+
+      - name: Verify serial folder scan and aggregate JSON
+        shell: pwsh
+        run: |
+          $launcher = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester.exe | Select-Object -First 1
+          if (-not $launcher) { throw "125A_Plugin_Tester.exe not found" }
+          $env:125A_PLUGIN_TESTER_REPORT_DIR = Join-Path (Get-Location) "build\folder-scan-reports"
+          Remove-Item $env:125A_PLUGIN_TESTER_REPORT_DIR -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $env:125A_PLUGIN_TESTER_REPORT_DIR | Out-Null
+          $scanRoot = Join-Path (Get-Location) "build\folder-scan-fixtures"
+          Remove-Item $scanRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $scanRoot | Out-Null
+          $good = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_GoodControl.vst3" | Select-Object -First 1
+          $bad = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_BadLifecycle.vst3" | Select-Object -First 1
+          if (-not $good) { throw "GoodControl folder-scan fixture not found" }
+          if (-not $bad) { throw "BadLifecycle folder-scan fixture not found" }
+          Copy-Item $good.FullName $scanRoot -Recurse
+          Copy-Item $bad.FullName $scanRoot -Recurse
+          & $launcher.FullName $scanRoot
+          $actual = $LASTEXITCODE
+          if ($actual -ne 1) { throw "Folder scan returned $actual; expected 1" }
+          $summaryTxt = Join-Path $env:125A_PLUGIN_TESTER_REPORT_DIR "125A_Folder_Scan_Summary.txt"
+          $summaryJson = Join-Path $env:125A_PLUGIN_TESTER_REPORT_DIR "125A_Folder_Scan_Summary.json"
+          $progressTxt = Join-Path $env:125A_PLUGIN_TESTER_REPORT_DIR "125A_Folder_Scan_Progress.txt"
+          foreach ($p in @($summaryTxt,$summaryJson,$progressTxt)) { if (-not (Test-Path $p)) { throw "Folder scan output missing: $p" } }
+          $text = Get-Content $summaryTxt -Raw
+          foreach ($required in @("Version: 0.2.6","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
+          $progressText = Get-Content $progressTxt -Raw
+          foreach ($required in @("state=complete","total=2","current=2","pass=1","fail=1")) { if (-not $progressText.Contains($required)) { throw "Folder scan progress missing: $required" } }
+          $jsonData = Get-Content $summaryJson -Raw | ConvertFrom-Json
+          if ($jsonData.schemaVersion -ne 1) { throw "Folder JSON schemaVersion was not 1" }
+          if ($jsonData.counts.found -ne 2 -or $jsonData.counts.pass -ne 1 -or $jsonData.counts.fail -ne 1 -or $jsonData.counts.inconclusive -ne 0) { throw "Folder JSON counts incorrect" }
+          if ($jsonData.plugins.Count -ne 2) { throw "Folder JSON did not contain exactly two plugins" }
+          $statuses = @($jsonData.plugins | ForEach-Object { $_.status })
+          if (($statuses | Where-Object { $_ -eq "PASS" }).Count -ne 1 -or ($statuses | Where-Object { $_ -eq "FAIL" }).Count -ne 1) { throw "Folder JSON plugin statuses incorrect" }
+          $pluginJson = @(Get-ChildItem $env:125A_PLUGIN_TESTER_REPORT_DIR -File -Filter "*_125A_QA_Report.json")
+          if ($pluginJson.Count -ne 2) { throw "Expected exactly two per-plugin JSON reports; got $($pluginJson.Count)" }
+          Write-Host "Folder scan QA PASS"
+          exit 0
+
+      - name: Stage single-file portable package
+        shell: pwsh
+        run: |
+          $stub = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_PortableStub.exe | Select-Object -First 1
+          $packer = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_HelperPacker.exe | Select-Object -First 1
+          $dispatcher = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester.exe | Select-Object -First 1
+          $gui = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_GUI.exe | Select-Object -First 1
+          $single = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_Single.exe | Select-Object -First 1
+          $worker = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_Worker.exe | Select-Object -First 1
+          $reloadProbe = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_ReloadProbe.exe | Select-Object -First 1
+          $stateProbe = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_StateProbe.exe | Select-Object -First 1
+          $editorLifecycleProbe = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_EditorLifecycleProbe.exe | Select-Object -First 1
+          $ioEventProbe = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_IOEventProbe.exe | Select-Object -First 1
+          $validator = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_SteinbergValidator.exe | Select-Object -First 1
+          $validatorCore = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_SteinbergValidatorCore.exe | Select-Object -First 1
+          foreach ($entry in @{Stub=$stub;Packer=$packer;Dispatcher=$dispatcher;GUI=$gui;Single=$single;Worker=$worker;ReloadProbe=$reloadProbe;StateProbe=$stateProbe;EditorLifecycleProbe=$editorLifecycleProbe;IOEventProbe=$ioEventProbe;Validator=$validator;ValidatorCore=$validatorCore}.GetEnumerator()) { if (-not $entry.Value) { throw "$($entry.Key) executable not found" } }
+          Remove-Item artifact -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          $portable = Join-Path (Get-Location) "artifact\125A_Plugin_Tester.exe"
+          Copy-Item $stub.FullName $portable -Force
+          & $packer.FullName $portable 12501 $gui.FullName 12502 $dispatcher.FullName 12503 $single.FullName 12504 $worker.FullName 12505 $reloadProbe.FullName 12506 $stateProbe.FullName 12507 $ioEventProbe.FullName 12508 $validator.FullName 12509 $validatorCore.FullName 12510 $editorLifecycleProbe.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Portable helper embedding failed with exit code $LASTEXITCODE" }
+
+      - name: Verify final portable EXE end to end
+        shell: pwsh
+        run: |
+          $portable = Get-Item artifact\125A_Plugin_Tester.exe
+          $good = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_GoodControl.vst3" | Select-Object -First 1
+          $badIO = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_BadIO.vst3" | Select-Object -First 1
+          if (-not $good) { throw "GoodControl portable fixture not found" }
+          if (-not $badIO) { throw "BadIO portable fixture not found" }
+          $env:125A_PLUGIN_TESTER_REPORT_DIR = Join-Path (Get-Location) "build\portable-reports"
+          Remove-Item $env:125A_PLUGIN_TESTER_REPORT_DIR -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $env:125A_PLUGIN_TESTER_REPORT_DIR | Out-Null
+
+          # The public portable binary is a Windows GUI-subsystem executable.
+          # PowerShell's call operator does not reliably wait for such programs
+          # and may leave $LASTEXITCODE unset. Start-Process -Wait -PassThru is
+          # therefore required here so the CI validates the real final EXE exit code.
+          $goodProcess = Start-Process -FilePath $portable.FullName -ArgumentList @("--portable-test", $good.FullName) -Wait -PassThru
+          if ($goodProcess.ExitCode -ne 0) { throw "Portable GoodControl test returned $($goodProcess.ExitCode); expected 0" }
+
+          $badProcess = Start-Process -FilePath $portable.FullName -ArgumentList @("--portable-test", $badIO.FullName) -Wait -PassThru
+          if ($badProcess.ExitCode -ne 1) { throw "Portable BadIO test returned $($badProcess.ExitCode); expected 1" }
+
+          $goodReport = Get-ChildItem $env:125A_PLUGIN_TESTER_REPORT_DIR -File -Filter "125A_QA_GoodControl_*_125A_QA_Report.txt" | Select-Object -First 1
+          $badIoProbe = Get-ChildItem $env:125A_PLUGIN_TESTER_REPORT_DIR -File -Filter "125A_QA_BadIO_*_125A_IO_Event_Probe.txt" | Select-Object -First 1
+          if (-not $goodReport) { throw "Portable GoodControl QA report missing" }
+          if (-not $badIoProbe) { throw "Portable BadIO I/O report missing" }
+          $goodText = Get-Content $goodReport.FullName -Raw
+          if (-not $goodText.Contains("0 WARNING / 0 FAIL")) { throw "Portable GoodControl report was not clean" }
+          $badText = Get-Content $badIoProbe.FullName -Raw
+          if (-not $badText.Contains("FirstFailure: Bus arrangement - out-of-range bus index was accepted")) { throw "Portable BadIO report did not preserve exact I/O failure diagnosis" }
+          Write-Host "Portable single-EXE QA PASS"
+
+      - name: Ensure only one public executable is shipped
+        shell: pwsh
+        run: |
+          if (Get-ChildItem artifact -Recurse -Filter "125A_QA_*.vst3" -ErrorAction SilentlyContinue) { throw "Internal VST3 QA fixtures must not be shipped" }
+          $productionExes = @(Get-ChildItem artifact -File -Filter "*.exe")
+          if ($productionExes.Count -ne 1) { throw "Portable package must contain exactly one executable; got $($productionExes.Count)" }
+          if ($productionExes[0].Name -ne "125A_Plugin_Tester.exe") { throw "Unexpected portable executable name: $($productionExes[0].Name)" }
+
+      - name: Upload fixture diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 125A-Plugin-Tester-Fixture-Diagnostics
+          path: |
+            build/qa-reports/*
+            build/folder-scan-reports/*
+            build/portable-reports/*
+          if-no-files-found: warn
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: 125A-Plugin-Tester-Windows-x64
+          path: artifact/
