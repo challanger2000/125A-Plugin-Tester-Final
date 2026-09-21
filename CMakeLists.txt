@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(PluginTester125A VERSION 0.2.6 LANGUAGES CXX)
+project(PluginTester125A VERSION 0.2.7 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -96,7 +96,7 @@ if(WIN32)
 
   if(MSVC)
     foreach(t PluginTester125AWorker PluginTester125AReloadProbe PluginTester125AStateProbe PluginTester125AEditorLifecycleProbe PluginTester125AIOEventProbe PluginTester125AValidatorWrapper PluginTester125AGuardSelfTest PluginTester125ALauncher PluginTester125ADispatcher PluginTester125AGui PluginTester125APortableStub PluginTester125AHelperPacker PluginTester125AQAGoodControl PluginTester125AQABadLifecycle PluginTester125AQABadNaN PluginTester125AQABadState PluginTester125AQABadIO PluginTester125AQAGoodEditor PluginTester125AQABadEditor)
-      target_compile_options(${t} PRIVATE /W4 /permissive-)
+      target_compile_options(${t} PRIVATE /W4 /WX /permissive-)
     endforeach()
   endif()
 

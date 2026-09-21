@@ -58,6 +58,9 @@ HWND hookedListViewGetHeader(HWND list) {
 }
 }
 
+#ifdef ListView_GetHeader
+#undef ListView_GetHeader
+#endif
 #define ListView_GetHeader hookedListViewGetHeader
 #include "gui_final.cpp"
 #undef ListView_GetHeader

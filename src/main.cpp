@@ -63,7 +63,7 @@ public:
         std::ofstream out(path, std::ios::binary);
         if (!out) return false;
         out << "125A Plugin Tester / Quality Checker\n";
-        out << "Version: 0.2.6\n";
+        out << "Version: 0.2.7\n";
         out << "Plugin: " << pluginPath.string() << "\n\n";
         for (const auto& r : results_) {
             out << "[" << label(r.level) << "] " << r.test;
@@ -1008,7 +1008,7 @@ void inspectAudioProcessing(IComponent* component, IEditController* controller, 
 
 int main(int argc, char** argv) {
     std::cout << "============================================================\n";
-    std::cout << "  125A Plugin Tester / Quality Checker v0.2.6\n";
+    std::cout << "  125A Plugin Tester / Quality Checker v0.2.7\n";
     std::cout << "============================================================\n\n";
 
     std::string pathText;

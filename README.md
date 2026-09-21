@@ -1,48 +1,72 @@
 # 125A Plugin Tester / Quality Checker
 
-**Version 0.2.0 – Windows x64**
+**Version 0.2.7 – Windows x64**
 
-The 125A Plugin Tester is a standalone Windows quality-assurance tool for VST3 plug-ins. It combines structural validation, lifecycle checks, processing stress tests, state testing, isolated I/O/event probing and the official Steinberg VST3 validator in one portable executable.
+125A Plugin Tester is a portable VST3 quality-assurance tool for Windows. The public package contains exactly one executable, `125A_Plugin_Tester.exe`, which embeds and extracts the internal helper tools required for isolated testing.
 
 ## What it checks
 
-- VST3 module loading and factory classes
-- Component/controller creation and connection
-- Audio/event bus metadata and activation
-- Processing setup across common sample rates and buffer sizes
+- VST3 module loading and factory/class discovery
+- Component/controller creation, initialization, connection and teardown
+- Audio/event bus metadata, arrangements and activation
+- Common sample rates and buffer sizes
 - 32-bit processing stability and finite-output checks
-- Sustained processing and lifecycle stress
+- Sustained processing and processing-state lifecycle
 - Offline processing
 - Component/controller state roundtrips
 - Fresh-instance state verification
 - Reload/instantiation stress
-- I/O, sidechain and event isolation
+- Native editor lifecycle: create, attach, runtime/message pump, detach and destroy
+- Isolated I/O, sidechain and event probing
 - Official Steinberg VST3 validator
+- Crash, hang and timeout isolation using Windows Job Objects
+- Single plug-in tests and recursive serial folder scans
 - Human-readable TXT reports and structured JSON reports
 
-## Release status
+## Result model
 
-The distributed executable is the exact artifact produced by successful development workflow **Build #61** from the verified `main` state.
+- **PASS** – all applicable checks passed
+- **WARNING** – no deterministic failure, but review is required
+- **FAIL** – a reproducible plug-in contract, lifecycle, state, processing or validator failure was detected
+- **INCONCLUSIVE** – the test could not be completed reliably because of a crash, timeout or tester/OS infrastructure problem
 
-The final BadIO acceptance test confirmed that the tester correctly detects the deliberately invalid bus-arrangement contract violation:
+## Internal acceptance fixtures
+
+The development workflow verifies both specificity and sensitivity against deliberate VST3 fixtures:
+
+- Good Control
+- Bad Lifecycle
+- Bad NaN
+- Bad State
+- Bad I/O
+- Good Editor
+- Bad Editor
+
+The Bad I/O fixture must preserve the exact diagnosis:
 
 `Bus arrangement - out-of-range bus index was accepted`
 
-The same fixture still passes the official Steinberg validator, demonstrating that the 125A-specific QA layer can expose deterministic problems beyond the validator's standard test set.
+The workflow also validates folder-scan aggregation, the production Job Object guard, the Steinberg validator wrapper and the final single-file portable executable.
+
+## v0.2.7 maintenance pass
+
+- fixed the remaining GUI header macro redefinition warning
+- enabled **/WX** for all 125A-owned Windows targets so future compiler warnings fail the build
+- synchronized all tester/report version strings to 0.2.7
+- retained direct single-VST3 and recursive folder-test workflows
+- retained the one-public-EXE packaging model
+- removed stale pre-0.2.7 binary artifacts from the source branch
 
 ## Usage
 
-Run `125A_Plugin_Tester.exe` and select a VST3 plug-in or plug-in folder to test. Reports are written to the 125A Plugin Tester report directory under the current Windows user profile.
+Run `125A_Plugin_Tester.exe`, select a VST3 plug-in or a VST3 folder, and start the test. Reports are written to the 125A Plugin Tester report directory under the current Windows user profile.
 
 ## Platform
 
 - Windows x64
 - VST3
 - Standalone portable executable
-
-## Version
-
-125A Plugin Tester **0.2.0**
+- Steinberg VST3 SDK 3.8.1 baseline
 
 ## License note
 

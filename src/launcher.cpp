@@ -229,7 +229,7 @@ void writeGuardReport(const fs::path& pluginPath,
     }
 
     out << "125A Plugin Tester / Quality Checker\n";
-    out << "Version: 0.2.6\n";
+    out << "Version: 0.2.7\n";
     out << "Guard: crash-isolated launcher with Windows Job Object containment\n";
     out << "Plugin: " << pluginPath.string() << "\n\n";
     out << "[FAIL] " << finding << " - " << detail << "\n\n";
@@ -516,7 +516,7 @@ int wmain(int argc, wchar_t** argv) {
     const bool interactive = argc < 2;
 
     std::wcout << L"============================================================\n";
-    std::wcout << L"  125A Plugin Tester / Quality Checker v0.2.6\n";
+    std::wcout << L"  125A Plugin Tester / Quality Checker v0.2.7\n";
     std::wcout << L"  Job Object crash/hang isolation: ON\n";
     std::wcout << L"============================================================\n\n";
 

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 0.2.6
+      - 0.2.7
 
 jobs:
   build:
@@ -92,7 +92,7 @@ jobs:
             if ($ioText.Contains("Result: FAIL") -and $ioText.Contains("FirstFailure: None")) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe reported FAIL without a concrete first failure" }
             if ($requiredIoText -and -not $ioText.Contains($requiredIoText)) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe did not contain expected evidence: $requiredIoText" }
             $editorText = Get-Content $editorProbe.FullName -Raw
-            if (-not $editorText.Contains("Version: 0.2.6")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
+            if (-not $editorText.Contains("Version: 0.2.7")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
             if ($requiredEditorText -and -not $editorText.Contains($requiredEditorText)) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe did not contain expected evidence: $requiredEditorText" }
             $jsonData = Get-Content $json.FullName -Raw | ConvertFrom-Json
             if ($jsonData.schemaVersion -ne 1) { throw "$name JSON schemaVersion was not 1" }
@@ -137,7 +137,7 @@ jobs:
           $progressTxt = Join-Path $env:125A_PLUGIN_TESTER_REPORT_DIR "125A_Folder_Scan_Progress.txt"
           foreach ($p in @($summaryTxt,$summaryJson,$progressTxt)) { if (-not (Test-Path $p)) { throw "Folder scan output missing: $p" } }
           $text = Get-Content $summaryTxt -Raw
-          foreach ($required in @("Version: 0.2.6","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
+          foreach ($required in @("Version: 0.2.7","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
           $progressText = Get-Content $progressTxt -Raw
           foreach ($required in @("state=complete","total=2","current=2","pass=1","fail=1")) { if (-not $progressText.Contains($required)) { throw "Folder scan progress missing: $required" } }
           $jsonData = Get-Content $summaryJson -Raw | ConvertFrom-Json
@@ -228,5 +228,5 @@ jobs:
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: 125A-Plugin-Tester-Windows-x64
+          name: 125A-Plugin-Tester-v0.2.7-Windows-x64
           path: artifact/

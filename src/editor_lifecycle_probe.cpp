@@ -190,7 +190,7 @@ public:
     : out_(ReportPaths::editorLifecycle(pluginPath), std::ios::binary | std::ios::trunc) {
         if (out_) {
             out_ << "125A Plugin Tester / Editor Lifecycle Probe\n";
-            out_ << "Version: 0.2.6\n";
+            out_ << "Version: 0.2.7\n";
             out_ << "Plugin: " << pluginPath.string() << "\n\n";
             out_.flush();
         }

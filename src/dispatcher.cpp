@@ -340,7 +340,7 @@ bool writePluginJson(const fs::path& pluginPath, ScanStatus status, int exitCode
 
     out << "{\n";
     out << "  \"schemaVersion\": 1,\n";
-    out << "  \"testerVersion\": \"0.2.6\",\n";
+    out << "  \"testerVersion\": \"0.2.7\",\n";
     out << "  \"generatedUtc\": \"" << utcTimestamp() << "\",\n";
     out << "  \"pluginPath\": \"" << jsonEscape(pathUtf8(pluginPath)) << "\",\n";
     out << "  \"pluginId\": \"" << jsonEscape(utf8(ReportPaths::stablePathHash(pluginPath))) << "\",\n";
@@ -440,7 +440,7 @@ bool writeFolderSummary(const fs::path& root,
         return false;
 
     out << "125A Plugin Tester / VST3 Folder Scan\n";
-    out << "Version: 0.2.6\n";
+    out << "Version: 0.2.7\n";
     out << "Folder: " << pathUtf8(root) << "\n\n";
     out << "FOUND: " << entries.size() << "\n";
     out << "PASS: " << counts.pass << "\n";
@@ -468,7 +468,7 @@ bool writeFolderSummary(const fs::path& root,
 
     json << "{\n";
     json << "  \"schemaVersion\": 1,\n";
-    json << "  \"testerVersion\": \"0.2.6\",\n";
+    json << "  \"testerVersion\": \"0.2.7\",\n";
     json << "  \"generatedUtc\": \"" << utcTimestamp() << "\",\n";
     json << "  \"folder\": \"" << jsonEscape(pathUtf8(root)) << "\",\n";
     json << "  \"counts\": {\"found\": " << entries.size() << ", \"pass\": " << counts.pass
@@ -591,7 +591,7 @@ int wmain(int argc, wchar_t** argv) {
     std::wstring pathText;
     if (interactive) {
         std::wcout << L"============================================================\n";
-        std::wcout << L"  125A Plugin Tester / Quality Checker v0.2.6\n";
+        std::wcout << L"  125A Plugin Tester / Quality Checker v0.2.7\n";
         std::wcout << L"  Single VST3 or complete VST3 folder\n";
         std::wcout << L"============================================================\n\n";
         std::wcout << L"VST3 plug-in or folder path eingeben:\n> ";
