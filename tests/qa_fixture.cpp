@@ -8,6 +8,7 @@
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -65,13 +66,18 @@ constexpr const char* kPluginName = "125A QA Functional Gain";
 const FUID kProcessorUID(0x125A1010, 0x20261015, 0x00000000, 0x00000011);
 const FUID kControllerUID(0x125A2010, 0x20261015, 0x00000000, 0x00000021);
 constexpr const char* kPluginName = "125A QA Bad Ignored Gain";
+#elif QA_FIXTURE_KIND == 11
+const FUID kProcessorUID(0x125A1011, 0x20261015, 0x00000000, 0x00000012);
+const FUID kControllerUID(0x125A2011, 0x20261015, 0x00000000, 0x00000022);
+constexpr const char* kPluginName = "125A QA Bad Concurrent GUI Audio";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
 
-#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6
+#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11
 
 int gEditorRemovedCount = 0;
+std::atomic<bool> gEditorAttached{false};
 
 class QAFixtureView final : public FObject, public IPlugView {
 public:
@@ -88,6 +94,7 @@ public:
         if (!parent || isPlatformTypeSupported(type) != kResultTrue)
             return kInvalidArgument;
         attached_ = true;
+        gEditorAttached.store(true);
         return kResultTrue;
     }
 
@@ -95,6 +102,7 @@ public:
         if (!attached_)
             return kResultFalse;
         attached_ = false;
+        gEditorAttached.store(false);
 
 #if QA_FIXTURE_KIND == 6
         ++gEditorRemovedCount;
@@ -210,7 +218,7 @@ public:
     }
 
     IPlugView* PLUGIN_API createView(FIDString name) override {
-#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6
+#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11
         if (name && std::strcmp(name, ViewType::kEditor) == 0)
             return new QAFixtureView();
 #else
@@ -334,6 +342,10 @@ public:
 #endif
 
     tresult PLUGIN_API process(ProcessData& data) override {
+#if QA_FIXTURE_KIND == 11
+        if (gEditorAttached.load() && data.numSamples > 0)
+            return kResultFalse; // Invalid only during concurrent editor/audio usage
+#endif
 #if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
         if (data.inputParameterChanges) {
             const int32 queues = data.inputParameterChanges->getParameterCount();
