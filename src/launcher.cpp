@@ -707,6 +707,51 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
 
+    // Each audio matrix profile is a fresh plugin/worker process, supervised
+    // by the same Windows Job Object guard as the other QA stages.
+    int isolatedMatrixPass = 0;
+    int isolatedMatrixUnsupported = 0;
+    int isolatedMatrixFailures = 0;
+    for (const wchar_t* format : {L"32", L"64"}) {
+        for (const wchar_t* rate : {L"44100", L"48000", L"96000", L"192000"}) {
+            for (const wchar_t* samples : {L"32", L"1024"}) {
+                const std::wstring profile = std::wstring(L"--matrix-profile=") +
+                    format + L"|" + rate + L"|" + samples + L"|" + pluginPath.wstring();
+                const int status = runIsolated(worker, profile, pluginPath,
+                    std::min<DWORD>(probeTimeoutMs, 30000u),
+                    "Isolated processing matrix", true);
+                if (status == 0) {
+                    ++isolatedMatrixPass;
+                } else if (status == 10) {
+                    ++isolatedMatrixUnsupported;
+                } else if (status == 1) {
+                    ++isolatedMatrixFailures;
+                } else {
+                    // Crash, hang or infrastructure error: the guard report
+                    // already contains the failing stage and exception code.
+                    waitForEnter(interactive);
+                    return 1;
+                }
+            }
+        }
+    }
+    const std::string matrixDetails =
+        std::to_string(isolatedMatrixPass) + " independently guarded process profiles PASS; " +
+        std::to_string(isolatedMatrixUnsupported) + " unsupported; " +
+        std::to_string(isolatedMatrixFailures) + " failed (32/64-bit, 44.1/48/96/192 kHz, blocks 32/1024)";
+    if (!annotateReport(pluginPath,
+                        isolatedMatrixFailures > 0 ? "FAIL" :
+                          isolatedMatrixUnsupported > 0 ? "WARN" : "PASS",
+                        "Fresh-process audio matrix", matrixDetails,
+                        isolatedMatrixFailures == 0 && isolatedMatrixUnsupported == 0 ? 1 : 0,
+                        isolatedMatrixFailures == 0 && isolatedMatrixUnsupported > 0 ? 1 : 0,
+                        isolatedMatrixFailures > 0 ? 1 : 0)) {
+        writeGuardReport(pluginPath, "Isolated processing matrix report",
+                         "Could not annotate the QA report with matrix results", true);
+        waitForEnter(interactive);
+        return 1;
+    }
+
     if (!annotateReport(pluginPath,
                         "PASS",
                         "Reload/instantiation stress",
@@ -768,7 +813,7 @@ int wmain(int argc, wchar_t** argv) {
         std::wcerr << L"[WARN] Report annotation - Steinberg validator result could not be integrated\n";
 
     const bool editorFailure = editorLifecycleResult == 1 || editorLifecycleResult == 124 || editorLifecycleResult == 126;
-    const bool deterministicFailure = workerResult == 1 || stateResult == 1 || editorFailure || ioEventResult == 1 || validatorResult == 1;
+    const bool deterministicFailure = workerResult == 1 || stateResult == 1 || editorFailure || ioEventResult == 1 || validatorResult == 1 || isolatedMatrixFailures > 0;
     const int result = deterministicFailure ? 1 : 0;
     std::wcout << L"\nReport storage: " << ReportPaths::root().wstring() << L'\n';
     std::wcout << L"Launcher result code: " << result << L'\n';
