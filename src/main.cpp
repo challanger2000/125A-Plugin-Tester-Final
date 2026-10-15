@@ -1340,9 +1340,133 @@ void inspectAudioProcessing(IComponent* component, IEditController* controller, 
     }
 }
 
+// A single process handles exactly one format/rate/block case. The parent
+// launcher starts a fresh guarded Windows process for each requested profile.
+template <typename Sample>
+int executeIsolatedMatrixCase(const fs::path& pluginPath, int32 format,
+                              double rate, int32 samples) {
+    std::string error;
+    auto module = Module::create(pluginPath.u8string(), error);
+    if (!module) {
+        std::cerr << "[FAIL] Isolated matrix: module could not load: " << error << "\n";
+        return 1;
+    }
+    HostApplication host;
+    auto factory = module->getFactory();
+    factory.setHostContext(&host);
+    for (const auto& info : factory.classInfos()) {
+        if (info.category() != kVstAudioEffectClass &&
+            std::string(info.category().data()) != "Audio Mix Processor")
+            continue;
+        auto component = factory.createInstance<IComponent>(info.ID());
+        if (!component) return 1;
+        if (component->initialize(&host) != kResultOk) return 1;
+
+        IAudioProcessor* rawProcessor = nullptr;
+        if (component->queryInterface(IAudioProcessor::iid,
+                                      reinterpret_cast<void**>(&rawProcessor)) != kResultTrue ||
+            !rawProcessor) {
+            component->terminate();
+            return 10;
+        }
+        const auto finish = [&](int status) {
+            rawProcessor->release();
+            component->terminate();
+            return status;
+        };
+        if (rawProcessor->canProcessSampleSize(format) != kResultTrue)
+            return finish(10);
+
+        Reporter report;
+        activateDefaultBuses(component.get(), report);
+        ProcessSetup setup{};
+        setup.processMode = kRealtime;
+        setup.symbolicSampleSize = format;
+        setup.maxSamplesPerBlock = samples;
+        setup.sampleRate = rate;
+        if (rawProcessor->setupProcessing(setup) != kResultTrue)
+            return finish(10);
+
+        auto inputStorage = makeAudioBuses<Sample>(component.get(), kInput, samples);
+        auto outputStorage = makeAudioBuses<Sample>(component.get(), kOutput, samples);
+        if (!hasActiveBuffers(outputStorage))
+            return finish(10);
+        fillInputPattern(inputStorage, AudioPattern::DC);
+        auto inputs = copyBusDescriptors(inputStorage);
+        auto outputs = copyBusDescriptors(outputStorage);
+
+        if (component->setActive(true) != kResultTrue)
+            return finish(1);
+        if (rawProcessor->setProcessing(true) != kResultTrue) {
+            component->setActive(false);
+            return finish(1);
+        }
+        bool good = true;
+        for (int i = 0; i < 3; ++i) {
+            clearOutputBuses(outputStorage);
+            for (size_t j = 0; j < outputs.size(); ++j)
+                outputs[j] = outputStorage[j].bus;
+            ProcessData data{};
+            data.processMode = kRealtime;
+            data.symbolicSampleSize = format;
+            data.numSamples = samples;
+            data.numInputs = static_cast<int32>(inputs.size());
+            data.numOutputs = static_cast<int32>(outputs.size());
+            data.inputs = inputs.empty() ? nullptr : inputs.data();
+            data.outputs = outputs.empty() ? nullptr : outputs.data();
+            if (rawProcessor->process(data) != kResultOk || countNonFinite(outputStorage) != 0) {
+                good = false;
+                break;
+            }
+        }
+        const bool stopped = rawProcessor->setProcessing(false) == kResultTrue;
+        const bool inactive = component->setActive(false) == kResultTrue;
+        if (!good || !stopped || !inactive) {
+            std::cerr << "[FAIL] Isolated matrix: processing or shutdown failed\n";
+            return finish(1);
+        }
+        std::cout << "[PASS] Isolated matrix: "
+                  << (format == kSample32 ? "32" : "64") << "-bit / " << rate
+                  << " Hz / " << samples << " samples, 3 blocks\n";
+        return finish(0);
+    }
+    return 10;
+}
+
+// A single encoded argument avoids ambiguity in plugin paths containing spaces.
+// '|' cannot occur in Windows file names, so it is a safe field delimiter.
+int runIsolatedMatrixArgument(const std::string& value) {
+    constexpr char prefix[] = "--matrix-profile=";
+    if (value.rfind(prefix, 0) != 0) return 2;
+    const std::string payload = value.substr(sizeof(prefix) - 1);
+    const size_t sep1 = payload.find('|');
+    if (sep1 == std::string::npos) return 2;
+    const size_t sep2 = payload.find('|', sep1 + 1);
+    if (sep2 == std::string::npos) return 2;
+    const size_t sep3 = payload.find('|', sep2 + 1);
+    if (sep3 == std::string::npos) return 2;
+    const std::string formatText = payload.substr(0, sep1);
+    const std::string rateText = payload.substr(sep1 + 1, sep2 - sep1 - 1);
+    const std::string samplesText = payload.substr(sep2 + 1, sep3 - sep2 - 1);
+    const std::string path = payload.substr(sep3 + 1);
+    if (path.empty() || (formatText != "32" && formatText != "64")) return 2;
+    if (rateText != "44100" && rateText != "48000" &&
+        rateText != "96000" && rateText != "192000") return 2;
+    if (samplesText != "32" && samplesText != "1024") return 2;
+    const fs::path pluginPath = fs::u8path(path);
+    if (!fs::exists(pluginPath)) return 2;
+    const double rate = std::stod(rateText);
+    const int32 samples = std::stoi(samplesText);
+    if (formatText == "32")
+        return executeIsolatedMatrixCase<Sample32>(pluginPath, kSample32, rate, samples);
+    return executeIsolatedMatrixCase<Sample64>(pluginPath, kSample64, rate, samples);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]).rfind("--matrix-profile=", 0) == 0)
+        return runIsolatedMatrixArgument(argv[1]);
     std::cout << "============================================================\n";
     std::cout << "  125A Plugin Tester / Quality Checker v0.2.10\n";
     std::cout << "============================================================\n\n";
