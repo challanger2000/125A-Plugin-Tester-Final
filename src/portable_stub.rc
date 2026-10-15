@@ -1,8 +1,8 @@
 #include <windows.h>
 
 1 VERSIONINFO
-FILEVERSION 0,2,0,0
-PRODUCTVERSION 0,2,0,0
+FILEVERSION 0,2,10,0
+PRODUCTVERSION 0,2,10,0
 FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
 #ifdef _DEBUG
 FILEFLAGS VS_FF_DEBUG
@@ -19,11 +19,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "125A\0"
             VALUE "FileDescription", "125A Plugin Tester / Quality Checker\0"
-            VALUE "FileVersion", "0.2.0\0"
+            VALUE "FileVersion", "0.2.10\0"
             VALUE "InternalName", "125A_Plugin_Tester\0"
             VALUE "OriginalFilename", "125A_Plugin_Tester.exe\0"
             VALUE "ProductName", "125A Plugin Tester / Quality Checker\0"
-            VALUE "ProductVersion", "0.2.0\0"
+            VALUE "ProductVersion", "0.2.10\0"
         END
     END
     BLOCK "VarFileInfo"
