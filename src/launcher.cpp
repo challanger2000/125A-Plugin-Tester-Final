@@ -713,8 +713,8 @@ int wmain(int argc, wchar_t** argv) {
     int isolatedMatrixUnsupported = 0;
     int isolatedMatrixFailures = 0;
     for (const wchar_t* format : {L"32", L"64"}) {
-        for (const wchar_t* rate : {L"44100", L"48000", L"96000", L"192000"}) {
-            for (const wchar_t* samples : {L"32", L"1024"}) {
+        for (const wchar_t* rate : {L"44100", L"48000", L"88200", L"96000", L"192000"}) {
+            for (const wchar_t* samples : {L"1", L"32", L"64", L"128", L"256", L"512", L"1024", L"2048", L"4096", L"8192"}) {
                 const std::wstring profile = std::wstring(L"--matrix-profile=") +
                     format + L"|" + rate + L"|" + samples + L"|" + pluginPath.wstring();
                 const int status = runIsolated(worker, profile, pluginPath,
@@ -738,7 +738,7 @@ int wmain(int argc, wchar_t** argv) {
     const std::string matrixDetails =
         std::to_string(isolatedMatrixPass) + " independently guarded process profiles PASS; " +
         std::to_string(isolatedMatrixUnsupported) + " unsupported; " +
-        std::to_string(isolatedMatrixFailures) + " failed (32/64-bit, 44.1/48/96/192 kHz, blocks 32/1024)";
+        std::to_string(isolatedMatrixFailures) + " failed (32/64-bit, 44.1/48/88.2/96/192 kHz, blocks 1–8192)";
     if (!annotateReport(pluginPath,
                         isolatedMatrixFailures > 0 ? "FAIL" :
                           isolatedMatrixPass > 0 ? "PASS" : "INFO",
