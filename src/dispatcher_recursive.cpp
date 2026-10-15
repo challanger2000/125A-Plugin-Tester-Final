@@ -135,11 +135,17 @@ int runFolderScanRobust(const fs::path& singleExe, const fs::path& root) {
     std::vector<ScanEntry> entries;
     entries.reserve(plugins.size());
     bool infrastructureError = false;
-    writeFolderProgress(plugins.size(), 0, entries, {}, "running");
+    if (!writeFolderProgress(plugins.size(), 0, entries, {}, "running")) {
+        infrastructureError = true;
+        std::wcerr << L"[FAIL] Folder scan - Could not write initial progress report\n";
+    }
 
     for (size_t i = 0; i < plugins.size(); ++i) {
         const auto& plugin = plugins[i];
-        writeFolderProgress(plugins.size(), i, entries, plugin, "running");
+        if (!writeFolderProgress(plugins.size(), i, entries, plugin, "running")) {
+            infrastructureError = true;
+            std::wcerr << L"[FAIL] Folder scan - Could not write in-progress report\n";
+        }
         std::wcout << L"============================================================\n";
         std::wcout << L"[" << (i + 1) << L" / " << plugins.size() << L"] " << plugin.wstring() << L'\n';
         std::wcout << L"============================================================\n";
@@ -151,7 +157,10 @@ int runFolderScanRobust(const fs::path& singleExe, const fs::path& root) {
             infrastructureError = true;
             std::wcerr << L"[FAIL] JSON report - Could not write structured report for " << plugin.wstring() << L'\n';
         }
-        writeFolderProgress(plugins.size(), i + 1, entries, plugin, "running");
+        if (!writeFolderProgress(plugins.size(), i + 1, entries, plugin, "running")) {
+            infrastructureError = true;
+            std::wcerr << L"[FAIL] Folder scan - Could not persist completed plugin progress\n";
+        }
         std::wcout << L"Folder scan result: " << statusLabel(status) << L"\n\n";
     }
 
