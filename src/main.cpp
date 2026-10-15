@@ -992,13 +992,14 @@ void runActualProcessingMatrix(IComponent* component,
             }
             bool ok = true;
             for (int block = 0; block < 3; ++block) {
+                const int32 actualSamples = block == 1 ? std::max<int32>(1, count / 2) : count;
                 clearOutputBuses(outputStorage);
                 for (size_t bus = 0; bus < outputs.size(); ++bus)
                     outputs[bus] = outputStorage[bus].bus;
                 ProcessData data{};
                 data.processMode = kRealtime;
                 data.symbolicSampleSize = format;
-                data.numSamples = count;
+                data.numSamples = actualSamples;
                 data.numInputs = static_cast<int32>(inputs.size());
                 data.numOutputs = static_cast<int32>(outputs.size());
                 data.inputs = inputs.empty() ? nullptr : inputs.data();
@@ -1403,13 +1404,14 @@ int executeIsolatedMatrixCase(const fs::path& pluginPath, int32 format,
         }
         bool good = true;
         for (int i = 0; i < 3; ++i) {
+            const int32 actualSamples = i == 1 ? std::max<int32>(1, samples / 2) : samples;
             clearOutputBuses(outputStorage);
             for (size_t j = 0; j < outputs.size(); ++j)
                 outputs[j] = outputStorage[j].bus;
             ProcessData data{};
             data.processMode = kRealtime;
             data.symbolicSampleSize = format;
-            data.numSamples = samples;
+            data.numSamples = actualSamples;
             data.numInputs = static_cast<int32>(inputs.size());
             data.numOutputs = static_cast<int32>(outputs.size());
             data.inputs = inputs.empty() ? nullptr : inputs.data();
