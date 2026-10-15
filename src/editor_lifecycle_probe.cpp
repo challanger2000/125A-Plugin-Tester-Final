@@ -506,6 +506,28 @@ int runEditorLifecycle(const fs::path& pluginPath) {
             else if (concurrentAudio == 0)
                 std::cout << "[INFO] Editor/audio concurrency - unsupported bus layout or sample format\n";
 
+            stage.mark(cyclePrefix + "minimize/restore");
+            ShowWindow(hwnd, SW_MINIMIZE);
+            pumpMessages(30);
+            ShowWindow(hwnd, SW_RESTORE);
+            pumpMessages(30);
+
+            bool geometryOk = true;
+            if (view->canResize() == kResultTrue) {
+                stage.mark(cyclePrefix + "resizable onSize roundtrip");
+                ViewRect original{};
+                if (view->getSize(&original) == kResultTrue) {
+                    ViewRect resized = original;
+                    resized.right += 32;
+                    resized.bottom += 24;
+                    if (view->checkSizeConstraint(&resized) == kResultTrue) {
+                        if (view->onSize(&resized) != kResultTrue ||
+                            view->onSize(&original) != kResultTrue)
+                            geometryOk = false;
+                    }
+                }
+            }
+
             stage.mark(cyclePrefix + "focus");
             view->onFocus(true);
             pumpMessages(30);
@@ -524,6 +546,12 @@ int runEditorLifecycle(const fs::path& pluginPath) {
             view->release();
             stage.mark(cyclePrefix + "complete");
 
+            if (!geometryOk) {
+                controller.close();
+                component->terminate();
+                std::cerr << "[FAIL] Editor lifecycle - supported resize/onSize roundtrip failed\n";
+                return 1;
+            }
             if (concurrentAudio < 0) {
                 controller.close();
                 component->terminate();
