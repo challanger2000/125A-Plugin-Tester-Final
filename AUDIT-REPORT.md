@@ -519,3 +519,15 @@ Bis dahin bleibt die tatsächlich belegte Zuverlässigkeit auf statische Eigensc
 **Statusänderungsregel:** IDs bleiben stabil. Keine Befunde löschen oder kommentarlos umklassifizieren. Jede Änderung braucht Datum, alte/neue Kategorie bzw. Status, technischen Grund, Quellcommit und überprüfbaren Nachweis. APPROVED ist eine Benutzerentscheidung; FIXED benötigt gesonderte Codefreigabe, Commit und Regression. REJECTED benötigt Gegenbeleg.
 
 **Übergabe:** 9 CODE CONFIRMED / 0 RUNTIME CONFIRMED / 4 SUSPECTED / 8 ENHANCEMENT. Keine Reparatur umgesetzt. Der Titel des gewünschten Dokumentations-PRs lautet „AUDIT: Complete technical review of 125A Plugin Tester v0.2.9“; dieser Titel ersetzt nicht die hier ausdrücklich dokumentierten offenen Nachweise. GitHub-Berichtslink/PR-Link werden erst als vorhanden bezeichnet, wenn ihre Erstellung beziehungsweise der Branch-Push bestätigt ist.
+
+## 11. Bereitstellung und konkreter Zugangsblocker
+
+Der Dokumentationsbranch wurde am 2026-10-15 erfolgreich über den vorhandenen GitHub-HTTPS-Git-Zugang gepusht und anschließend per git ls-remote verifiziert. main blieb unverändert auf dem untersuchten Quellcommit. Der Vergleich zur Prüfbasis enthält ausschließlich die neue AUDIT-REPORT.md; alle vorhandenen Dateien sind bytegleich.
+
+- [Bericht auf dem Dokumentationsbranch](https://github.com/challanger2000/125A-Plugin-Tester-Final/blob/docs/audit-plugin-tester-v0.2.9-2026-10-15/AUDIT-REPORT.md)
+- [Dokumentationsdiff gegen main](https://github.com/challanger2000/125A-Plugin-Tester-Final/compare/main...docs/audit-plugin-tester-v0.2.9-2026-10-15)
+- [GitHub-Formular zum Anlegen des angeforderten PRs](https://github.com/challanger2000/125A-Plugin-Tester-Final/pull/new/docs/audit-plugin-tester-v0.2.9-2026-10-15) — **kein bereits erstellter PR**.
+
+Der ausdrückliche Versuch mit gh pr create, Basis main, diesem Dokumentationsbranch, dem angeforderten Titel und einer vollständigen Dokumentationsbeschreibung scheiterte mit: Post https://api.github.com/graphql: Forbidden. Zuvor scheiterten Actions-/Release-Leseabfragen; curl zeigte bereits beim CONNECT-Tunnel einen Proxy-403. API-Zugang ist damit blockiert; daraus folgt weder ein fehlender GitHub-Token noch das Fehlen erfolgreicher CI-Läufe. Keine Tokenwerte wurden angefordert, ausgelesen oder dokumentiert.
+
+**Noch erforderlich:** erlaubter und autorisierter HTTPS-Zugang zu api.github.com für CI-/Artefaktlesen und PR-Erstellung. Danach die betroffenen Abfragen und PR-Erstellung erneut ausführen, tatsächlichen PR-Link ergänzen; niemals einen PR als erstellt behaupten, nur weil ein Formularlink existiert. Alternativ kann der Nutzer den Dokumentations-PR über das verlinkte GitHub-Formular anlegen. Kein Merge durchführen. Die Dokumentation ist bereits dauerhaft auf dem Remote-Branch vorhanden, die PR-Bereitstellung bleibt offen.
