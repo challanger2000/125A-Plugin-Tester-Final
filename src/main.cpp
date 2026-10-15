@@ -1344,7 +1344,7 @@ void inspectAudioProcessing(IComponent* component, IEditController* controller, 
 
 int main(int argc, char** argv) {
     std::cout << "============================================================\n";
-    std::cout << "  125A Plugin Tester / Quality Checker v0.2.9\n";
+    std::cout << "  125A Plugin Tester / Quality Checker v0.2.10\n";
     std::cout << "============================================================\n\n";
 
     std::string pathText;
