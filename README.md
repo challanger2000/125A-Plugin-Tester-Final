@@ -1,8 +1,8 @@
 # 125A Plugin Tester / Quality Checker
 
-**CURRENT FINAL SOURCE: v0.2.9 — this is the authoritative Final repository state.**
+**CURRENT WINDOWS x64 FINAL: v0.2.10** — [permanent GitHub Release](https://github.com/challanger2000/125A-Plugin-Tester-Final/releases/tag/v0.2.10), exact QA-tested source `ec2db65b9b9dbce2b7a5d146cb54869c9ad82e6d`.
 
-**v0.2.10 Windows x64 candidate:** QA-tested implementation is on branch `fix/tester-v0.2.10-nine-audit-findings`. Windows Actions run [38733381439](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38733381439) completed successfully, with portable EXE artifact `125A-Plugin-Tester-Windows-x64`. See [QA-STATUS-v0.2.10.md](QA-STATUS-v0.2.10.md) for checked scope, exact source commit, ZIP checksum and explicitly remaining extensions. **This candidate is not the stable main release.**
+Windows Actions QA [38744097119](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38744097119) passed. See [CURRENT.md](CURRENT.md) and [QA-STATUS-v0.2.10.md](QA-STATUS-v0.2.10.md) for exact hashes, validation and limitations of the callback import monitoring. Previous stable v0.2.9 remains on default `main`.
 
 Console-based VST3 quality checker for Windows x64. It is designed for 125A internal QA and for general technical checks of third-party VST3 plug-ins.
 
