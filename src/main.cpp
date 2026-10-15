@@ -1056,7 +1056,8 @@ int main(int argc, char** argv) {
     if (!module) {
         report.add(Level::Fail, "Module load", error.empty() ? "Unknown loading error" : error);
         const auto reportPath = ReportPaths::qa(pluginPath);
-        report.write(reportPath, pluginPath);
+        if (!report.write(reportPath, pluginPath))
+            return 2; // Tester infrastructure failure, not a plug-in verdict.
         return 1;
     }
     report.add(Level::Pass, "Module load", "VST3 module loaded successfully");
@@ -1185,8 +1186,8 @@ int main(int argc, char** argv) {
     }
 
     const auto reportPath = ReportPaths::qa(pluginPath);
-    if (report.write(reportPath, pluginPath)) report.add(Level::Info, "Report", reportPath.string());
-    else report.add(Level::Warning, "Report", "Could not write QA report");
+    const bool reportWritten = report.write(reportPath, pluginPath);
+    if (!reportWritten) report.add(Level::Warning, "Report", "Could not write QA report");
 
     std::cout << "\n============================================================\n";
     std::cout << "RESULT: " << report.summary() << '\n';
@@ -1195,5 +1196,6 @@ int main(int argc, char** argv) {
     else std::cout << "RELEASE: PASS\n";
     std::cout << "============================================================\n";
 
+    if (!reportWritten) return 2; // Inconclusive: cannot supply a trustworthy report.
     return report.failCount() == 0 ? 0 : 1;
 }
