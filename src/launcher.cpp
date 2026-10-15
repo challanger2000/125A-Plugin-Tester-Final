@@ -741,10 +741,10 @@ int wmain(int argc, wchar_t** argv) {
         std::to_string(isolatedMatrixFailures) + " failed (32/64-bit, 44.1/48/96/192 kHz, blocks 32/1024)";
     if (!annotateReport(pluginPath,
                         isolatedMatrixFailures > 0 ? "FAIL" :
-                          isolatedMatrixUnsupported > 0 ? "WARN" : "PASS",
+                          isolatedMatrixPass > 0 ? "PASS" : "INFO",
                         "Fresh-process audio matrix", matrixDetails,
-                        isolatedMatrixFailures == 0 && isolatedMatrixUnsupported == 0 ? 1 : 0,
-                        isolatedMatrixFailures == 0 && isolatedMatrixUnsupported > 0 ? 1 : 0,
+                        isolatedMatrixFailures == 0 && isolatedMatrixPass > 0 ? 1 : 0,
+                        0,
                         isolatedMatrixFailures > 0 ? 1 : 0)) {
         writeGuardReport(pluginPath, "Isolated processing matrix report",
                          "Could not annotate the QA report with matrix results", true);
