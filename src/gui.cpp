@@ -696,6 +696,10 @@ PlainFinding explainFinding(const std::wstring& finding) {
 }
 
 void addPlainLanguageSummary(const std::wstring& report) {
+    if (report.empty() || report.find(L"TEST INCONCLUSIVE") != std::wstring::npos) {
+        addResultRow(L"Kurz erklärt", L"INCONCLUSIVE – Kein vollständiger erfolgreicher Prüfbericht vorhanden.");
+        return;
+    }
     const std::wstring fail = firstFinding(report, L"[FAIL] ");
     const std::wstring warn = firstFinding(report, L"[WARN] ");
 
