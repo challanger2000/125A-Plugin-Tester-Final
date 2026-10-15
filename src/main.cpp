@@ -1116,6 +1116,8 @@ void runReferenceGainProfile(IComponent* component,
     }};
 
     int mismatches = 0;
+    MemoryStream referenceState;
+    bool haveReferenceState = false;
     for (const auto& scenario : scenarios) {
         ParameterChanges changes(2);
         int32 index = 0;
@@ -1151,6 +1153,8 @@ void runReferenceGainProfile(IComponent* component,
             ++mismatches;
             break;
         }
+        if (std::string(scenario.name) == "gain +3.5 dB")
+            haveReferenceState = component->getState(&referenceState) == kResultTrue;
         const double actual = outputsStore[0].channels[0][0];
         if (std::abs(actual - scenario.expected) > 0.001) {
             report.add(Level::Fail, "Functional reference profile",
@@ -1160,6 +1164,43 @@ void runReferenceGainProfile(IComponent* component,
         } else {
             report.add(Level::Pass, "Functional reference profile",
                        std::string(scenario.name) + " measured=" + std::to_string(actual));
+        }
+    }
+
+    if (!haveReferenceState) {
+        report.add(Level::Fail, "Semantic state reference",
+                   "Reference gain fixture did not provide serialized state");
+        ++mismatches;
+    } else {
+        // The final scenario reset gain to 0.5; restoring the earlier 0.75
+        // snapshot must restore the audible +3.5 dB gain, not just return OK.
+        referenceState.seek(0, IBStream::kIBSeekSet, nullptr);
+        if (component->setState(&referenceState) != kResultTrue) {
+            report.add(Level::Fail, "Semantic state reference", "Saved gain state was rejected");
+            ++mismatches;
+        } else {
+            clearOutputBuses(outputsStore);
+            auto inputs = copyBusDescriptors(inputsStore);
+            auto outputs = copyBusDescriptors(outputsStore);
+            ProcessData data{};
+            data.processMode = kRealtime;
+            data.symbolicSampleSize = kSample32;
+            data.numSamples = blockSamples;
+            data.numInputs = static_cast<int32>(inputs.size());
+            data.numOutputs = static_cast<int32>(outputs.size());
+            data.inputs = inputs.empty() ? nullptr : inputs.data();
+            data.outputs = outputs.empty() ? nullptr : outputs.data();
+            const bool processed = processor->process(data) == kResultOk;
+            const double restored = outputsStore[0].channels[0][0];
+            if (!processed || !std::isfinite(restored) || std::abs(restored - 0.375) > 0.001) {
+                report.add(Level::Fail, "Semantic state reference",
+                           "Expected 0.375 output after state restore, measured " +
+                           std::to_string(restored));
+                ++mismatches;
+            } else {
+                report.add(Level::Pass, "Semantic state reference",
+                           "Restored state recovered the measured gain response");
+            }
         }
     }
 
