@@ -276,7 +276,8 @@ ResultCounts parseCounts(const std::string& text) {
         return counts;
 
     if (std::sscanf(text.c_str() + pos, "RESULT: %d PASS / %d WARNING / %d FAIL",
-                    &counts.pass, &counts.warning, &counts.fail) != 3) {
+                    &counts.pass, &counts.warning, &counts.fail) != 3 ||
+        counts.pass < 0 || counts.warning < 0 || counts.fail < 0) {
         counts = {};
     }
     return counts;
