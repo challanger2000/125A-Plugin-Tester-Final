@@ -383,9 +383,11 @@ std::vector<TestBusStorage<Sample>> makeAudioBuses(IComponent* component, BusDir
             storage.bus.numChannels = std::max<int32>(0, info.channelCount);
             storage.bus.silenceFlags = 0;
 
+            if (storage.bus.numChannels > 0) {
+                storage.channelPointers.resize(static_cast<size_t>(storage.bus.numChannels), nullptr);
+            }
             if (storage.active && storage.bus.numChannels > 0) {
                 storage.channels.resize(static_cast<size_t>(storage.bus.numChannels));
-                storage.channelPointers.resize(storage.channels.size());
                 for (size_t channel = 0; channel < storage.channels.size(); ++channel) {
                     storage.channels[channel].assign(static_cast<size_t>(numSamples), static_cast<Sample>(0));
                     storage.channelPointers[channel] = storage.channels[channel].data();
@@ -1141,9 +1143,7 @@ int main(int argc, char** argv) {
         IAudioProcessor* processor = nullptr;
         if (component->queryInterface(IAudioProcessor::iid, reinterpret_cast<void**>(&processor)) == kResultTrue && processor) {
             report.add(Level::Pass, "IAudioProcessor", "Audio processor interface available");
-            report.add(Level::Info, "Processor latency", std::to_string(processor->getLatencySamples()) + " samples");
-            const auto tail = processor->getTailSamples();
-            report.add(Level::Info, "Processor tail", tail == kInfiniteTail ? "infinite" : std::to_string(tail) + " samples");
+            // Latency/tail require a successful processing setup; never query here.
             if (isMixFxProcessor) {
                 report.add(Level::Info, "Standard VST3 processing lifecycle",
                            "Not applicable: Audio Mix Processor uses the host-specific Mix FX channel lifecycle");
