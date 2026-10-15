@@ -4,6 +4,7 @@
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "base/source/fobject.h"
 #include "pluginterfaces/gui/iplugview.h"
+#include "pluginterfaces/gui/iplugviewcontentscalesupport.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
@@ -506,6 +507,29 @@ int runEditorLifecycle(const fs::path& pluginPath) {
             else if (concurrentAudio == 0)
                 std::cout << "[INFO] Editor/audio concurrency - unsupported bus layout or sample format\n";
 
+            stage.mark(cyclePrefix + "content scale 100/150 percent");
+            bool scaleGeometryOk = true;
+            IPlugViewContentScaleSupport* scaleSupport = nullptr;
+            if (view->queryInterface(IPlugViewContentScaleSupport::iid,
+                                     reinterpret_cast<void**>(&scaleSupport)) == kResultTrue &&
+                scaleSupport) {
+                const tresult scaled = scaleSupport->setContentScaleFactor(1.5f);
+                ViewRect scaledRect{};
+                const bool readable = view->getSize(&scaledRect) == kResultTrue;
+                const tresult restored = scaleSupport->setContentScaleFactor(1.0f);
+                if (scaled == kResultTrue && restored == kResultTrue) {
+                    scaleGeometryOk = readable && scaledRect.right > scaledRect.left &&
+                                      scaledRect.bottom > scaledRect.top;
+                    std::cout << (scaleGeometryOk ? "[PASS]" : "[FAIL]")
+                              << " Editor scale 100/150 - supported factor calls and valid geometry\n";
+                } else {
+                    std::cout << "[INFO] Editor scale 100/150 - exposed interface declined optional scaling\n";
+                }
+                scaleSupport->release();
+            } else {
+                std::cout << "[INFO] Editor scale 100/150 - optional content scale interface unavailable\n";
+            }
+
             stage.mark(cyclePrefix + "minimize/restore");
             ShowWindow(hwnd, SW_MINIMIZE);
             pumpMessages(30);
@@ -546,6 +570,12 @@ int runEditorLifecycle(const fs::path& pluginPath) {
             view->release();
             stage.mark(cyclePrefix + "complete");
 
+            if (!scaleGeometryOk) {
+                controller.close();
+                component->terminate();
+                std::cerr << "[FAIL] Editor lifecycle - invalid geometry after accepted content scaling\n";
+                return 1;
+            }
             if (!geometryOk) {
                 controller.close();
                 component->terminate();
