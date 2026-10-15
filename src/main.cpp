@@ -944,6 +944,89 @@ void runOfflineProcessing(IComponent* component,
     report.add(Level::Pass, "Offline processing (" + sizeLabel + ")", "Offline setup and process block completed with finite output");
 }
 
+// Real process() coverage, distinct from setupProcessing-only acceptance checks.
+// Each profile gets a complete stop/deactivate/setup/activate/start cycle.
+// A fresh-process-per-profile host remains a separate isolation requirement.
+template <typename Sample>
+void runActualProcessingMatrix(IComponent* component,
+                               IAudioProcessor* processor,
+                               SymbolicSampleSizes format,
+                               Reporter& report) {
+    const std::array<double, 4> rates {44100.0, 48000.0, 96000.0, 192000.0};
+    const std::array<int32, 5> blocks {32, 128, 256, 512, 2048};
+    const std::string label = format == kSample32 ? "32-bit" : "64-bit";
+    int accepted = 0;
+    int rejected = 0;
+    int failed = 0;
+    for (double rate : rates) {
+        for (int32 count : blocks) {
+            ProcessSetup setup{};
+            setup.processMode = kRealtime;
+            setup.symbolicSampleSize = format;
+            setup.maxSamplesPerBlock = count;
+            setup.sampleRate = rate;
+            if (processor->setupProcessing(setup) != kResultTrue) {
+                ++rejected;
+                continue;
+            }
+            ++accepted;
+            auto inputStorage = makeAudioBuses<Sample>(component, kInput, count);
+            auto outputStorage = makeAudioBuses<Sample>(component, kOutput, count);
+            fillInputPattern(inputStorage, AudioPattern::DC);
+            auto inputs = copyBusDescriptors(inputStorage);
+            auto outputs = copyBusDescriptors(outputStorage);
+            if (component->setActive(true) != kResultTrue) {
+                ++failed;
+                report.add(Level::Fail, "Actual processing matrix",
+                           label + " " + std::to_string(static_cast<int>(rate)) +
+                           " Hz / " + std::to_string(count) + ": activation failed");
+                continue;
+            }
+            if (processor->setProcessing(true) != kResultTrue) {
+                ++failed;
+                component->setActive(false);
+                report.add(Level::Fail, "Actual processing matrix",
+                           label + " " + std::to_string(static_cast<int>(rate)) +
+                           " Hz / " + std::to_string(count) + ": start failed");
+                continue;
+            }
+            bool ok = true;
+            for (int block = 0; block < 3; ++block) {
+                clearOutputBuses(outputStorage);
+                for (size_t bus = 0; bus < outputs.size(); ++bus)
+                    outputs[bus] = outputStorage[bus].bus;
+                ProcessData data{};
+                data.processMode = kRealtime;
+                data.symbolicSampleSize = format;
+                data.numSamples = count;
+                data.numInputs = static_cast<int32>(inputs.size());
+                data.numOutputs = static_cast<int32>(outputs.size());
+                data.inputs = inputs.empty() ? nullptr : inputs.data();
+                data.outputs = outputs.empty() ? nullptr : outputs.data();
+                if (processor->process(data) != kResultOk || countNonFinite(outputStorage) > 0) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (processor->setProcessing(false) != kResultTrue ||
+                component->setActive(false) != kResultTrue)
+                ok = false;
+            if (!ok) {
+                ++failed;
+                report.add(Level::Fail, "Actual processing matrix",
+                           label + " " + std::to_string(static_cast<int>(rate)) +
+                           " Hz / " + std::to_string(count) +
+                           ": process, finite-output or shutdown check failed");
+            }
+        }
+    }
+    report.add(failed > 0 ? Level::Fail : rejected > 0 ? Level::Warning : Level::Pass,
+               "Actual processing matrix (" + label + ")",
+               std::to_string(accepted) + " profiles processed (3 blocks each), " +
+               std::to_string(rejected) + " rejected by setup, " +
+               std::to_string(failed) + " failed during processing; same component instance");
+}
+
 void activateDefaultBuses(IComponent* component, Reporter& report) {
     int activated = 0;
     int rejected = 0;
@@ -1060,6 +1143,11 @@ void inspectAudioProcessing(IComponent* component, IEditController* controller, 
         if (component->setActive(false) != kResultTrue)
             report.add(Level::Warning, "Audio torture deactivate (" + sizeLabel + ")", "setActive(false) returned failure");
     }
+
+    if (supports32)
+        runActualProcessingMatrix<Sample32>(component, processor, kSample32, report);
+    if (supports64)
+        runActualProcessingMatrix<Sample64>(component, processor, kSample64, report);
 
     const SymbolicSampleSizes stressSampleSize = supports32 ? kSample32 : kSample64;
     if (supports32)
