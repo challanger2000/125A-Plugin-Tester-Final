@@ -25,6 +25,10 @@
 #include <string>
 #include <vector>
 
+#ifndef QA_SOURCE_REVISION
+#define QA_SOURCE_REVISION "unknown"
+#endif
+
 namespace fs = std::filesystem;
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -81,6 +85,8 @@ public:
         if (!out) return false;
         out << "125A Plugin Tester / Quality Checker\n";
         out << "Version: 0.2.10\n";
+        out << "Source revision: " << QA_SOURCE_REVISION << "\n";
+        out << "VST3 SDK: v3.8.1_build_84\n";
         out << "Plugin: " << pluginPath.string() << "\n\n";
         for (const auto& r : results_) {
             out << "[" << label(r.level) << "] " << r.test;
