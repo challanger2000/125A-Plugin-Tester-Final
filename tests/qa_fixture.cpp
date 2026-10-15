@@ -192,6 +192,17 @@ public:
         return kResultOk;
     }
 
+    // Positive control explicitly advertises both audio precisions. Without
+    // this, the production QA only exercises its 32-bit branch.
+    tresult PLUGIN_API canProcessSampleSize(int32 symbolicSampleSize) override {
+#if QA_FIXTURE_KIND == 0
+        return (symbolicSampleSize == kSample32 || symbolicSampleSize == kSample64)
+                   ? kResultTrue : kResultFalse;
+#else
+        return symbolicSampleSize == kSample32 ? kResultTrue : kResultFalse;
+#endif
+    }
+
     tresult PLUGIN_API getState(IBStream*) override {
         return kResultTrue;
     }
