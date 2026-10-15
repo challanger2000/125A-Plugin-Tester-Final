@@ -30,7 +30,7 @@ add_executable(PluginTester125AWorker src/main.cpp
   "${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp"
   "${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/parameterchanges.cpp")
 target_link_libraries(PluginTester125AWorker PRIVATE sdk_hosting sdk_common base pluginterfaces)
-target_compile_definitions(PluginTester125AWorker PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX "QA_SOURCE_REVISION=\\"${QA_SOURCE_REVISION}\\"")
+target_compile_definitions(PluginTester125AWorker PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX "QA_SOURCE_REVISION=\"${QA_SOURCE_REVISION}\"")
 if(WIN32)
   target_sources(PluginTester125AWorker PRIVATE "${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_win32.cpp")
 
