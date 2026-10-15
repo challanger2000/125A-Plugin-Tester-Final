@@ -531,7 +531,10 @@ int summaryCount(const std::wstring& report, const std::wstring& label) {
 std::wstring statusFor(const fs::path& input, int exitCode, const std::wstring& report) {
     if (isVst3Path(input)) {
         if (exitCode == 1) return L"FAIL";
-        if (exitCode != 0 || report.empty()) return L"INCONCLUSIVE";
+        if (exitCode != 0 || report.empty() ||
+            report.find(L"RESULT: ") == std::wstring::npos ||
+            report.find(L"RELEASE: ") == std::wstring::npos)
+            return L"INCONCLUSIVE";
         if (report.find(L"TEST INCONCLUSIVE") != std::wstring::npos)
             return L"INCONCLUSIVE";
         if (report.find(L"[FAIL]") != std::wstring::npos)
@@ -551,11 +554,12 @@ std::wstring statusFor(const fs::path& input, int exitCode, const std::wstring& 
     if (warning > 0)
         return L"WARNING";
     const int discoveryErrors = summaryCount(report, L"DISCOVERY_ERRORS:");
-    if (exitCode != 0 || discoveryErrors > 0)
+    const int found = summaryCount(report, L"FOUND:");
+    if (exitCode != 0 || found < 0 || discoveryErrors < 0 || discoveryErrors > 0)
         return L"INCONCLUSIVE";
     if (inconclusive == 0 && fail == 0 && warning == 0 && discoveryErrors == 0)
         return L"PASS";
-    return exitCode == 0 ? L"PASS" : L"INCONCLUSIVE";
+    return L"INCONCLUSIVE";
 }
 
 std::wstring trimLine(std::wstring line) {
