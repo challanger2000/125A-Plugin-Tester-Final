@@ -1008,8 +1008,9 @@ void runActualProcessingMatrix(IComponent* component,
                     break;
                 }
             }
-            if (processor->setProcessing(false) != kResultTrue ||
-                component->setActive(false) != kResultTrue)
+            const bool stopped = processor->setProcessing(false) == kResultTrue;
+            const bool deactivated = component->setActive(false) == kResultTrue;
+            if (!stopped || !deactivated)
                 ok = false;
             if (!ok) {
                 ++failed;
