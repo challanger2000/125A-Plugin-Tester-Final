@@ -407,8 +407,45 @@ bool runOneSidechain(IComponent* component,
     data.inputs = inputDescriptors.empty() ? nullptr : inputDescriptors.data();
     data.outputs = outputDescriptors.empty() ? nullptr : outputDescriptors.data();
 
-    const bool processOk = processor->process(data) == kResultOk;
-    const bool finite = outputsFinite(outputs);
+    // Exercise consecutive processing blocks with explicit host transport
+    // positions, including stop/start, tempo and time-signature changes,
+    // a discontinuous locate and a loop-style backward jump.
+    ProcessContext transport{};
+    transport.sampleRate = 48000.0;
+    transport.state = ProcessContext::kPlaying |
+                      ProcessContext::kTempoValid |
+                      ProcessContext::kTimeSigValid |
+                      ProcessContext::kProjectTimeMusicValid;
+    transport.tempo = 120.0;
+    transport.timeSigNumerator = 4;
+    transport.timeSigDenominator = 4;
+    data.processContext = &transport;
+
+    bool processOk = true;
+    bool finite = true;
+    constexpr int kTransportBlocks = 6;
+    for (int block = 0; block < kTransportBlocks; ++block) {
+        transport.projectTimeSamples = block == 5 ? 0 : static_cast<int64>(block) * numSamples;
+        transport.projectTimeMusic = block == 5 ? 0.0 : block * (numSamples * 120.0 / (60.0 * 48000.0));
+        if (block == 1) {
+            transport.state &= ~ProcessContext::kPlaying;
+        } else {
+            transport.state |= ProcessContext::kPlaying;
+        }
+        transport.tempo = block >= 3 ? 137.0 : 120.0;
+        transport.timeSigNumerator = block >= 4 ? 3 : 4;
+        data.inputEvents = block == 0 ? &inputEvents : nullptr;
+        if (hasEventOutput) outputEvents.clear();
+        for (auto& output : outputs) output.silenceFlags = 0;
+        if (processor->process(data) != kResultOk) {
+            processOk = false;
+            break;
+        }
+        if (!outputsFinite(outputs)) {
+            finite = false;
+            break;
+        }
+    }
     const bool stopOk = processor->setProcessing(false) == kResultTrue;
     const bool deactivateOk = component->setActive(false) == kResultTrue;
     component->activateBus(kAudio, kInput, auxIndex, false);
