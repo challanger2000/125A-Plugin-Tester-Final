@@ -816,3 +816,15 @@ Aufruf: python3 /tmp/125a-audit-evidence/extract_and_test.py, nachdem der Skript
 | 2026-10-15, Fortsetzung | TESTER-001/-002/-006/-007: zusätzlicher lokaler Logiknachweis | unverändert extrahierte Funktionen mit Gegenkontrollen; keine Windows-E2E-Hochstufung |
 | 2026-10-15, Fortsetzung | TESTER-021: vorhandener Parser-Selbsttest lokal ausgeführt | Rückgabewert 0; kein offizieller Validatorlauf |
 | 2026-10-15, Fortsetzung | alle übrigen IDs erhalten und erneut nach Evidenzlage bewertet | keine unberechtigte FIXED-/REJECTED-/APPROVED-Änderung; keine Reparatur |
+
+## 14. Bereitstellungsstand der Fortsetzung
+
+Die Fortsetzung wurde ausschließlich als Änderung dieser Auditdatei auf den Remote-Branch **docs/audit-evidence-continuation-2026-10-15** gepusht. Der vollständige Bericht dieses Branches wurde anschließend von raw.githubusercontent.com mit HTTP 200 abgerufen und byteweise mit der lokalen Fassung verglichen. Alle bestehenden Nicht-Audit-Dateien blieben unverändert.
+
+- [Aktualisierter Bericht auf dem Dokumentationsbranch](https://github.com/challanger2000/125A-Plugin-Tester-Final/blob/docs/audit-evidence-continuation-2026-10-15/AUDIT-REPORT.md)
+- [Ausschließlicher Dokumentationsdiff gegen main](https://github.com/challanger2000/125A-Plugin-Tester-Final/compare/main...docs/audit-evidence-continuation-2026-10-15)
+- [GitHub-Formular zur PR-Erstellung](https://github.com/challanger2000/125A-Plugin-Tester-Final/pull/new/docs/audit-evidence-continuation-2026-10-15) — kein bereits erstellter PR.
+
+Der ausdrückliche Versuch mit gh pr create für diesen Branch und den Titel „AUDIT: Additional CI and logic evidence for Plugin Tester v0.2.9 [skip ci]“ scheiterte weiterhin mit Post https://api.github.com/graphql: Forbidden. Daher wurde **kein neuer PR erstellt oder zusammengeführt**. Ein direkter Push nach main würde den geforderten PR-Weg umgehen und wurde nicht vorgenommen.
+
+Die Abschlusskontrolle vor dieser Statusergänzung ergab: main weiterhin 12f92a702c4369de1e6d1b2075178a6a47cf4f2d; dort existiert der Erstbericht und ist per HTTP 200 abrufbar, sein SHA-256 ist unverändert f5459f87456291079ac7e8687178dea7ea0469374e2fd4494ad5fafd85d3b6de. Die **Fortsetzung ist noch nicht auf main**. Für den autorisierten reinen Dokumentationsmerge ist ein funktionierender API-/GraphQL-Zugang oder eine autorisierte GitHub-Web-Schreibsitzung erforderlich. [skip ci] beim eventuellen Squash-Merge beibehalten; neue CI-Läufe bleiben nicht freigegeben.
