@@ -24,6 +24,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <thread>
 
 #ifndef QA_SOURCE_REVISION
 #define QA_SOURCE_REVISION "unknown"
@@ -645,6 +646,44 @@ void runSustainedProcessing(IAudioProcessor* processor,
         nonFinite += countNonFinite(outputStorage);
         if (nonFinite > 0) break;
     }
+    // Paced host-like callback scheduling; all sleep/wait work is outside process().
+    constexpr int pacedBlocks = 32;
+    const auto period = std::chrono::duration<double>(static_cast<double>(numSamples) / 48000.0);
+    auto due = std::chrono::steady_clock::now();
+    int pacedOverruns = 0;
+    double pacedMaximumUs = 0.0;
+    for (int i = 0; i < pacedBlocks; ++i) {
+        clearOutputBuses(outputStorage);
+        for (size_t b = 0; b < outputs.size(); ++b) outputs[b] = outputStorage[b].bus;
+        ProcessData data{};
+        data.processMode = kRealtime;
+        data.symbolicSampleSize = sampleSize;
+        data.numSamples = numSamples;
+        data.numInputs = static_cast<int32>(inputs.size());
+        data.numOutputs = static_cast<int32>(outputs.size());
+        data.inputs = inputs.empty() ? nullptr : inputs.data();
+        data.outputs = outputs.empty() ? nullptr : outputs.data();
+        const auto startBlock = std::chrono::steady_clock::now();
+        if (processor->process(data) != kResultOk || countNonFinite(outputStorage) != 0) {
+            report.add(Level::Fail, "Paced realtime (" + sizeLabel + ")",
+                       "process failed or output non-finite");
+            return;
+        }
+        const auto endBlock = std::chrono::steady_clock::now();
+        const double duration = std::chrono::duration<double, std::micro>(
+            endBlock - startBlock).count();
+        pacedMaximumUs = std::max(pacedMaximumUs, duration);
+        if (duration > deadlineUs) ++pacedOverruns;
+        due += std::chrono::duration_cast<std::chrono::steady_clock::duration>(period);
+        if (std::chrono::steady_clock::now() < due)
+            std::this_thread::sleep_until(due);
+        else ++pacedOverruns;
+    }
+    report.add(pacedOverruns ? Level::Warning : Level::Pass,
+               "Paced realtime (" + sizeLabel + ")",
+               std::to_string(pacedBlocks) + " host-paced blocks, max=" +
+               std::to_string(pacedMaximumUs) + " us, deadline overruns=" +
+               std::to_string(pacedOverruns));
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
 
     if (nonFinite > 0) {
