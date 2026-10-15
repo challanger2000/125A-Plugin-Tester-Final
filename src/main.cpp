@@ -63,7 +63,7 @@ public:
         std::ofstream out(path, std::ios::binary);
         if (!out) return false;
         out << "125A Plugin Tester / Quality Checker\n";
-        out << "Version: 0.2.9\n";
+        out << "Version: 0.2.10\n";
         out << "Plugin: " << pluginPath.string() << "\n\n";
         for (const auto& r : results_) {
             out << "[" << label(r.level) << "] " << r.test;
