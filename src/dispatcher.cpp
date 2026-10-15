@@ -290,6 +290,13 @@ ScanStatus classifyResult(const fs::path& pluginPath, int exitCode) {
         return ScanStatus::Fail;
     }
 
+    // The subprocess result must be consistent with its report. A stale or
+    // truncated report cannot turn a failed subprocess into PASS.
+    if (exitCode == 1)
+        return ScanStatus::Fail;
+    if (exitCode != 0)
+        return ScanStatus::Inconclusive;
+
     if (readTextFile(ReportPaths::qa(pluginPath), text)) {
         const ResultCounts counts = parseCounts(text);
         if (counts.fail >= 0) {
@@ -301,8 +308,6 @@ ScanStatus classifyResult(const fs::path& pluginPath, int exitCode) {
         }
     }
 
-    if (exitCode == 1)
-        return ScanStatus::Fail;
     return ScanStatus::Inconclusive;
 }
 
