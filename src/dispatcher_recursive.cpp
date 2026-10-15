@@ -134,6 +134,7 @@ int runFolderScanRobust(const fs::path& singleExe, const fs::path& root) {
 
     std::vector<ScanEntry> entries;
     entries.reserve(plugins.size());
+    bool infrastructureError = false;
     writeFolderProgress(plugins.size(), 0, entries, {}, "running");
 
     for (size_t i = 0; i < plugins.size(); ++i) {
@@ -146,8 +147,10 @@ int runFolderScanRobust(const fs::path& singleExe, const fs::path& root) {
         const int exitCode = launchSingle(singleExe, {plugin.wstring()});
         const ScanStatus status = classifyResult(plugin, exitCode);
         entries.push_back({plugin, status, exitCode});
-        if (!writePluginJson(plugin, status, exitCode))
-            std::wcerr << L"[WARN] JSON report - Could not write structured report for " << plugin.wstring() << L'\n';
+        if (!writePluginJson(plugin, status, exitCode)) {
+            infrastructureError = true;
+            std::wcerr << L"[FAIL] JSON report - Could not write structured report for " << plugin.wstring() << L'\n';
+        }
         writeFolderProgress(plugins.size(), i + 1, entries, plugin, "running");
         std::wcout << L"Folder scan result: " << statusLabel(status) << L"\n\n";
     }
@@ -172,7 +175,7 @@ int runFolderScanRobust(const fs::path& singleExe, const fs::path& root) {
     std::wcout << L"  Summary JSON: " << ReportPaths::folderSummaryJson().wstring() << L'\n';
     std::wcout << L"============================================================\n";
 
-    return (counts.fail > 0 || counts.inconclusive > 0 || !discovery.errors.empty() || !summaryWritten || !finalProgressWritten) ? 1 : 0;
+    return (counts.fail > 0 || counts.inconclusive > 0 || !discovery.errors.empty() || infrastructureError || !summaryWritten || !finalProgressWritten) ? 1 : 0;
 }
 
 } // namespace
@@ -197,7 +200,7 @@ int wmain(int argc, wchar_t** argv) {
     std::wstring pathText;
     if (interactive) {
         std::wcout << L"============================================================\n";
-        std::wcout << L"  125A Plugin Tester / Quality Checker v0.2.9\n";
+        std::wcout << L"  125A Plugin Tester / Quality Checker v0.2.10\n";
         std::wcout << L"  Single VST3 or complete VST3 folder\n";
         std::wcout << L"============================================================\n\n";
         std::wcout << L"VST3 plug-in or folder path eingeben:\n> ";
@@ -223,8 +226,10 @@ int wmain(int argc, wchar_t** argv) {
     if (isVst3Path(input)) {
         result = launchSingle(singleExe, {input.wstring()});
         const ScanStatus status = classifyResult(input, result);
-        if (!writePluginJson(input, status, result))
-            std::wcerr << L"[WARN] JSON report - Could not write structured report\n";
+        if (!writePluginJson(input, status, result)) {
+            std::wcerr << L"[FAIL] JSON report - Could not write structured report\n";
+            result = 2;
+        }
     } else if (fs::is_directory(input, ec) && !ec) {
         result = runFolderScanRobust(singleExe, input);
     } else {
