@@ -180,7 +180,24 @@ public:
         return result;
     }
 
-    tresult PLUGIN_API setComponentState(IBStream*) override {
+    tresult PLUGIN_API setComponentState(IBStream* stream) override {
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+        if (!stream) return kInvalidArgument;
+        double gain = 0.0;
+        uint32 bypass = 0;
+        int32 read = 0;
+        if (stream->read(&gain, sizeof(gain), &read) != kResultTrue ||
+            read != sizeof(gain) || !std::isfinite(gain) || gain < 0.0 || gain > 1.0)
+            return kResultFalse;
+        if (stream->read(&bypass, sizeof(bypass), &read) != kResultTrue ||
+            read != sizeof(bypass) || bypass > 1)
+            return kResultFalse;
+        if (setParamNormalized(kQaReferenceGain, gain) != kResultTrue ||
+            setParamNormalized(kQaReferenceBypass, static_cast<ParamValue>(bypass)) != kResultTrue)
+            return kResultFalse;
+#else
+        (void)stream;
+#endif
         return kResultTrue;
     }
 
