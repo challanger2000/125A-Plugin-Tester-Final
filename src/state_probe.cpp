@@ -8,6 +8,7 @@
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/vsttypes.h"
 
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -240,6 +241,33 @@ ClassProbeResult probeClass(PluginFactory& factory,
         std::cerr << "[FAIL] Fresh-instance state verification - fresh component could not re-save restored state\n";
         hardFailure = true;
         return result;
+    }
+
+    // Distinguish a successful API return from an actually restored payload.
+    // Generic binary changes are advisory: plugins may legally serialize
+    // volatile or reordered metadata. The controlled marker fixture has a
+    // deterministic byte-for-byte contract and must be rejected if ignored.
+    const bool sameSize = sourceState.getSize() == restoredState.getSize();
+    const bool sameBytes = sameSize &&
+        (sourceState.getSize() == 0 ||
+         std::memcmp(sourceState.getData(), restoredState.getData(),
+                     static_cast<size_t>(sourceState.getSize())) == 0);
+    if (!sameBytes) {
+        constexpr char marker[] = "125A_STATE_PROBE";
+        const bool controlledFixture =
+            sourceState.getSize() >= sizeof(marker) &&
+            std::memcmp(sourceState.getData(), marker, sizeof(marker)) == 0;
+        if (controlledFixture) {
+            teardownController(destinationBinding, result, "Destination");
+            destination->terminate();
+            std::cerr << "[FAIL] Semantic state restoration - ignored-state control fixture returned different payload after restore\n";
+            hardFailure = true;
+            return result;
+        }
+        std::cout << "[WARN] Semantic state restoration - re-saved bytes differ; may be volatile serialization rather than semantic loss\n";
+        result.warning = true;
+    } else {
+        std::cout << "[PASS] Semantic state payload roundtrip - original and restored serialized payload match\n";
     }
 
     std::cout << "[PASS] Fresh-instance component state transfer - saved state applied after source instance destruction\n";
