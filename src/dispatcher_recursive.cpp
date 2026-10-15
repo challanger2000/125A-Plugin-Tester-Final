@@ -59,12 +59,11 @@ DiscoveryResult discoverPluginsRobust(const fs::path& root) {
             continue;
 
         std::error_code ec;
-        fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, ec);
+        fs::directory_iterator it(directory, fs::directory_options::none, ec);
         const fs::directory_iterator end;
         if (ec) {
-            if (ec != std::errc::permission_denied)
-                result.errors.push_back(L"Could not enumerate " + directory.wstring() + L": " +
-                                        utf8ToWide(ec.message()));
+            result.errors.push_back(L"Could not enumerate " + directory.wstring() + L": " +
+                                    utf8ToWide(ec.message()));
             continue;
         }
 
@@ -80,16 +79,15 @@ DiscoveryResult discoverPluginsRobust(const fs::path& root) {
                 std::error_code typeError;
                 if (entry.is_directory(typeError))
                     pending.push_back(entryPath);
-                if (typeError && typeError != std::errc::permission_denied)
+                if (typeError)
                     result.errors.push_back(L"Could not inspect " + entryPath.wstring() + L": " +
                                             utf8ToWide(typeError.message()));
             }
 
             it.increment(ec);
             if (ec) {
-                if (ec != std::errc::permission_denied)
-                    result.errors.push_back(L"Directory enumeration error in " + directory.wstring() + L": " +
-                                            utf8ToWide(ec.message()));
+                result.errors.push_back(L"Directory enumeration error in " + directory.wstring() + L": " +
+                                        utf8ToWide(ec.message()));
                 ec.clear();
             }
         }
