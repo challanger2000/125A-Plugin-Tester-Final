@@ -1,3 +1,4 @@
+#include "base/source/fobject.h"
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/parameterchanges.h"
@@ -30,6 +31,22 @@ using namespace Steinberg::Vst;
 using namespace VST3::Hosting;
 
 namespace {
+
+// Minimal host-side edit callback. The tester never injects automation from
+// this callback; it acknowledges well-formed controller notifications.
+class TesterComponentHandler final : public FObject, public IComponentHandler {
+public:
+    tresult PLUGIN_API beginEdit(ParamID) override { return kResultOk; }
+    tresult PLUGIN_API performEdit(ParamID, ParamValue) override { return kResultOk; }
+    tresult PLUGIN_API endEdit(ParamID) override { return kResultOk; }
+    tresult PLUGIN_API restartComponent(int32) override { return kResultOk; }
+
+    OBJ_METHODS(TesterComponentHandler, FObject)
+    DEFINE_INTERFACES
+        DEF_INTERFACE(IComponentHandler)
+    END_DEFINE_INTERFACES(FObject)
+    REFCOUNT_METHODS(FObject)
+};
 
 enum class Level { Pass, Warning, Fail, Info };
 
@@ -1179,6 +1196,14 @@ int main(int argc, char** argv) {
         }
 
         IEditController* activeController = hasSingleController ? singleController : (controllerInitialized ? controller.get() : nullptr);
+        TesterComponentHandler* componentHandler = nullptr;
+        if (activeController) {
+            componentHandler = new TesterComponentHandler();
+            const auto installed = activeController->setComponentHandler(componentHandler);
+            report.add(installed == kResultTrue ? Level::Pass : Level::Fail,
+                       "IComponentHandler", installed == kResultTrue
+                       ? "Host edit callback registered" : "Controller refused host edit callback");
+        }
         if (activeController) inspectParameters(activeController, report);
         else report.add(Level::Warning, "Parameter scan", "Skipped because controller is not initialized");
 
@@ -1206,6 +1231,8 @@ int main(int argc, char** argv) {
         }
         if (componentCP) componentCP->release();
         if (controllerCP) controllerCP->release();
+        if (activeController && componentHandler) activeController->setComponentHandler(nullptr);
+        if (componentHandler) componentHandler->release();
         if (controller && controllerInitialized) controller->terminate();
         if (singleController) singleController->release();
         component->terminate();
