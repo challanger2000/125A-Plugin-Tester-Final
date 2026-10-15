@@ -650,7 +650,8 @@ void runSustainedProcessing(IAudioProcessor* processor,
     constexpr int pacedBlocks = 32;
     const auto period = std::chrono::duration<double>(static_cast<double>(numSamples) / 48000.0);
     auto due = std::chrono::steady_clock::now();
-    int pacedOverruns = 0;
+    int pacedCallbackOverruns = 0;
+    int pacedSchedulerMisses = 0;
     double pacedMaximumUs = 0.0;
     for (int i = 0; i < pacedBlocks; ++i) {
         clearOutputBuses(outputStorage);
@@ -673,17 +674,18 @@ void runSustainedProcessing(IAudioProcessor* processor,
         const double duration = std::chrono::duration<double, std::micro>(
             endBlock - startBlock).count();
         pacedMaximumUs = std::max(pacedMaximumUs, duration);
-        if (duration > deadlineUs) ++pacedOverruns;
+        if (duration > deadlineUs) ++pacedCallbackOverruns;
         due += std::chrono::duration_cast<std::chrono::steady_clock::duration>(period);
         if (std::chrono::steady_clock::now() < due)
             std::this_thread::sleep_until(due);
-        else ++pacedOverruns;
+        else ++pacedSchedulerMisses;
     }
-    report.add(pacedOverruns ? Level::Warning : Level::Pass,
+    report.add(pacedCallbackOverruns ? Level::Warning : Level::Pass,
                "Paced realtime (" + sizeLabel + ")",
                std::to_string(pacedBlocks) + " host-paced blocks, max=" +
                std::to_string(pacedMaximumUs) + " us, deadline overruns=" +
-               std::to_string(pacedOverruns));
+               std::to_string(pacedCallbackOverruns) +
+               ", host scheduling misses=" + std::to_string(pacedSchedulerMisses));
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
 
     if (nonFinite > 0) {
