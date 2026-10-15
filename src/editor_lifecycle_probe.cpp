@@ -12,6 +12,10 @@
 #include "report_paths.h"
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <thread>
+#include <vector>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -54,6 +58,115 @@ void pumpMessages(DWORD durationMs) {
         }
         Sleep(10);
     } while (GetTickCount64() < end);
+}
+
+// Run the editor's message loop while a separate worker thread submits
+// audio blocks to the same live plugin instance. No GUI calls are made on the
+// audio thread. Returns 1=verified, 0=not applicable, -1=processing failure.
+int pumpWithConcurrentAudio(IComponent* component, DWORD runtimeMs) {
+    if (!component ||
+        component->getBusCount(kAudio, kInput) != 1 ||
+        component->getBusCount(kAudio, kOutput) != 1) {
+        pumpMessages(runtimeMs);
+        return 0;
+    }
+    BusInfo inputInfo{}, outputInfo{};
+    if (component->getBusInfo(kAudio, kInput, 0, inputInfo) != kResultTrue ||
+        component->getBusInfo(kAudio, kOutput, 0, outputInfo) != kResultTrue ||
+        inputInfo.channelCount < 1 || inputInfo.channelCount > 2 ||
+        outputInfo.channelCount < 1 || outputInfo.channelCount > 2) {
+        pumpMessages(runtimeMs);
+        return 0;
+    }
+    IAudioProcessor* processor = nullptr;
+    if (component->queryInterface(IAudioProcessor::iid,
+                                   reinterpret_cast<void**>(&processor)) != kResultTrue ||
+        !processor) {
+        pumpMessages(runtimeMs);
+        return 0;
+    }
+    const auto release = [&]() { processor->release(); };
+    if (processor->canProcessSampleSize(kSample32) != kResultTrue) {
+        release();
+        pumpMessages(runtimeMs);
+        return 0;
+    }
+    ProcessSetup setup{};
+    setup.processMode = kRealtime;
+    setup.symbolicSampleSize = kSample32;
+    setup.sampleRate = 48000.0;
+    setup.maxSamplesPerBlock = 256;
+    if (processor->setupProcessing(setup) != kResultTrue) {
+        release();
+        pumpMessages(runtimeMs);
+        return 0;
+    }
+    if (component->activateBus(kAudio, kInput, 0, true) != kResultTrue ||
+        component->activateBus(kAudio, kOutput, 0, true) != kResultTrue) {
+        release();
+        pumpMessages(runtimeMs);
+        return 0;
+    }
+
+    constexpr int samples = 256;
+    std::vector<std::vector<Sample32>> inputData(
+        static_cast<size_t>(inputInfo.channelCount), std::vector<Sample32>(samples, 0.1f));
+    std::vector<std::vector<Sample32>> outputData(
+        static_cast<size_t>(outputInfo.channelCount), std::vector<Sample32>(samples));
+    std::vector<Sample32*> inputPtrs, outputPtrs;
+    for (auto& channel : inputData) inputPtrs.push_back(channel.data());
+    for (auto& channel : outputData) outputPtrs.push_back(channel.data());
+
+    AudioBusBuffers inputBus{}, outputBus{};
+    inputBus.numChannels = inputInfo.channelCount;
+    inputBus.channelBuffers32 = inputPtrs.data();
+    outputBus.numChannels = outputInfo.channelCount;
+    outputBus.channelBuffers32 = outputPtrs.data();
+    ProcessData data{};
+    data.processMode = kRealtime;
+    data.symbolicSampleSize = kSample32;
+    data.numSamples = samples;
+    data.numInputs = 1;
+    data.numOutputs = 1;
+    data.inputs = &inputBus;
+    data.outputs = &outputBus;
+
+    if (component->setActive(true) != kResultTrue) {
+        release();
+        return -1;
+    }
+    if (processor->setProcessing(true) != kResultTrue) {
+        component->setActive(false);
+        release();
+        return -1;
+    }
+    std::atomic<bool> running{true};
+    std::atomic<bool> failed{false};
+    std::atomic<int> processed{0};
+    std::thread audio([&] {
+        while (running.load(std::memory_order_relaxed)) {
+            for (auto& channel : outputData)
+                std::fill(channel.begin(), channel.end(), Sample32(0));
+            if (processor->process(data) != kResultOk) {
+                failed.store(true, std::memory_order_relaxed);
+                break;
+            }
+            for (const auto& channel : outputData)
+                for (const auto value : channel)
+                    if (!std::isfinite(value))
+                        failed.store(true, std::memory_order_relaxed);
+            if (failed.load(std::memory_order_relaxed)) break;
+            processed.fetch_add(1, std::memory_order_relaxed);
+            Sleep(5); // pacing is outside the real-time process() callback
+        }
+    });
+    pumpMessages(runtimeMs);
+    running.store(false, std::memory_order_relaxed);
+    audio.join();
+    const bool stopped = processor->setProcessing(false) == kResultTrue;
+    const bool inactive = component->setActive(false) == kResultTrue;
+    release();
+    return !failed.load() && stopped && inactive && processed.load() > 0 ? 1 : -1;
 }
 
 class HostPlugFrame final : public FObject, public IPlugFrame {
@@ -384,10 +497,14 @@ int runEditorLifecycle(const fs::path& pluginPath) {
                 return 1;
             }
 
-            stage.mark(cyclePrefix + "runtime/message pump");
+            stage.mark(cyclePrefix + "runtime/message pump + concurrent audio");
             ShowWindow(hwnd, SW_SHOWNA);
             UpdateWindow(hwnd);
-            pumpMessages(150);
+            const int concurrentAudio = pumpWithConcurrentAudio(component.get(), 150);
+            if (concurrentAudio > 0)
+                std::cout << "[PASS] Editor/audio concurrency - processed audio while editor was attached\n";
+            else if (concurrentAudio == 0)
+                std::cout << "[INFO] Editor/audio concurrency - unsupported bus layout or sample format\n";
 
             stage.mark(cyclePrefix + "focus");
             view->onFocus(true);
@@ -406,6 +523,13 @@ int runEditorLifecycle(const fs::path& pluginPath) {
             stage.mark(cyclePrefix + "release view");
             view->release();
             stage.mark(cyclePrefix + "complete");
+
+            if (concurrentAudio < 0) {
+                controller.close();
+                component->terminate();
+                std::cerr << "[FAIL] Editor/audio concurrency - processing failed with attached editor\n";
+                return 1;
+            }
 
             if (removeResult != kResultTrue || clearFrameResult != kResultTrue) {
                 controller.close();
