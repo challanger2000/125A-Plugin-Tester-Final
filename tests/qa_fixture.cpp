@@ -47,6 +47,10 @@ constexpr const char* kPluginName = "125A QA Good Editor";
 const FUID kProcessorUID(0x125A1006, 0x20260919, 0x00000000, 0x00000007);
 const FUID kControllerUID(0x125A2006, 0x20260919, 0x00000000, 0x00000017);
 constexpr const char* kPluginName = "125A QA Bad Editor";
+#elif QA_FIXTURE_KIND == 7
+const FUID kProcessorUID(0x125A1007, 0x20261015, 0x00000000, 0x00000008);
+const FUID kControllerUID(0x125A2007, 0x20261015, 0x00000000, 0x00000018);
+constexpr const char* kPluginName = "125A QA Bad Ignored State";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -176,6 +180,9 @@ class QAFixtureProcessor final : public AudioEffect {
 public:
     QAFixtureProcessor() {
         setControllerClass(kControllerUID);
+#if QA_FIXTURE_KIND == 7
+        stateToken_ = ++stateInstanceCounter_;
+#endif
     }
 
     static FUnknown* createInstance(void*) {
@@ -203,7 +210,17 @@ public:
 #endif
     }
 
-    tresult PLUGIN_API getState(IBStream*) override {
+    tresult PLUGIN_API getState(IBStream* stream) override {
+#if QA_FIXTURE_KIND == 7
+        if (!stream) return kInvalidArgument;
+        constexpr char marker[] = "125A_STATE_PROBE";
+        int32 written = 0;
+        if (stream->write(const_cast<char*>(marker), static_cast<int32>(sizeof(marker)), &written) != kResultTrue ||
+            written != static_cast<int32>(sizeof(marker))) return kResultFalse;
+        written = 0;
+        if (stream->write(&stateToken_, static_cast<int32>(sizeof(stateToken_)), &written) != kResultTrue ||
+            written != static_cast<int32>(sizeof(stateToken_))) return kResultFalse;
+#endif
         return kResultTrue;
     }
 
@@ -236,6 +253,11 @@ public:
 #endif
         return kResultTrue;
     }
+
+#if QA_FIXTURE_KIND == 7
+    static uint32 stateInstanceCounter_;
+    uint32 stateToken_ = 0;
+#endif
 
     tresult PLUGIN_API process(ProcessData& data) override {
         if (data.numOutputs <= 0 || data.outputs == nullptr)
@@ -278,6 +300,9 @@ public:
         return kResultOk;
     }
 };
+#if QA_FIXTURE_KIND == 7
+uint32 QAFixtureProcessor::stateInstanceCounter_ = 0;
+#endif
 
 } // namespace
 
