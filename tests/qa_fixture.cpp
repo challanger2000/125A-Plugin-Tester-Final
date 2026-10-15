@@ -383,7 +383,9 @@ public:
         void* allocation = ::HeapAlloc(::GetProcessHeap(), 0, 128);
         if (allocation) ::HeapFree(::GetProcessHeap(), 0, allocation);
 #elif QA_FIXTURE_KIND == 15
-        (void)::WaitForSingleObject(::GetCurrentThread(), 1);
+        static std::atomic<uint32_t> callbackCount{0};
+        if ((callbackCount.fetch_add(1, std::memory_order_relaxed) & 31u) == 31u)
+            (void)::WaitForSingleObject(::GetCurrentThread(), 1);
 #endif
 #if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13
         if (data.inputEvents && data.outputEvents) {
