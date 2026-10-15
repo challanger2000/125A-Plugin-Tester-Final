@@ -299,6 +299,7 @@ void inspectProcessingSetups(IAudioProcessor* processor, Reporter& report) {
     const std::array<int32, 10> blockSizes {1, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};
     int totalAccepted = 0;
     int totalRejected = 0;
+    bool latencyTailReported = false;
 
     for (const auto sampleRate : sampleRates) {
         int acceptedAtRate = 0;
@@ -310,6 +311,12 @@ void inspectProcessingSetups(IAudioProcessor* processor, Reporter& report) {
             setup.maxSamplesPerBlock = blockSize;
             setup.sampleRate = sampleRate;
             if (processor->setupProcessing(setup) == kResultTrue) {
+                if (!latencyTailReported) {
+                    report.add(Level::Info, "Processor latency", std::to_string(processor->getLatencySamples()) + " samples after processing setup");
+                    const auto tail = processor->getTailSamples();
+                    report.add(Level::Info, "Processor tail", tail == kInfiniteTail ? "infinite" : std::to_string(tail) + " samples after processing setup");
+                    latencyTailReported = true;
+                }
                 ++acceptedAtRate;
                 ++totalAccepted;
             } else {
