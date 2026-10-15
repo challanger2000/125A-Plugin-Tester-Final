@@ -1459,8 +1459,11 @@ int runIsolatedMatrixArgument(const std::string& value) {
     const std::string path = payload.substr(sep3 + 1);
     if (path.empty() || (formatText != "32" && formatText != "64")) return 2;
     if (rateText != "44100" && rateText != "48000" &&
-        rateText != "96000" && rateText != "192000") return 2;
-    if (samplesText != "32" && samplesText != "1024") return 2;
+        rateText != "88200" && rateText != "96000" && rateText != "192000") return 2;
+    if (samplesText != "1" && samplesText != "32" && samplesText != "64" &&
+        samplesText != "128" && samplesText != "256" && samplesText != "512" &&
+        samplesText != "1024" && samplesText != "2048" && samplesText != "4096" &&
+        samplesText != "8192") return 2;
     const fs::path pluginPath = fs::u8path(path);
     if (!fs::exists(pluginPath)) return 2;
     const double rate = std::stod(rateText);
