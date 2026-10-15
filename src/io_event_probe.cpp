@@ -300,9 +300,11 @@ std::vector<AudioStorage<Sample>> makeAudioBuses(const std::vector<BusSnapshot>&
         storage.descriptor.numChannels = std::max<int32>(0, bus.channels);
         storage.descriptor.silenceFlags = 0;
 
+        if (storage.descriptor.numChannels > 0) {
+            storage.pointers.resize(static_cast<size_t>(storage.descriptor.numChannels), nullptr);
+        }
         if (storage.active && storage.descriptor.numChannels > 0) {
             storage.channels.resize(static_cast<size_t>(storage.descriptor.numChannels));
-            storage.pointers.resize(storage.channels.size());
             for (size_t channel = 0; channel < storage.channels.size(); ++channel) {
                 storage.channels[channel].assign(static_cast<size_t>(numSamples), static_cast<Sample>(0));
                 storage.pointers[channel] = storage.channels[channel].data();
