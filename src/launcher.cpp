@@ -516,7 +516,7 @@ int wmain(int argc, wchar_t** argv) {
     const bool interactive = argc < 2;
 
     std::wcout << L"============================================================\n";
-    std::wcout << L"  125A Plugin Tester / Quality Checker v0.2.5\n";
+    std::wcout << L"  125A Plugin Tester / Quality Checker v0.2.10\n";
     std::wcout << L"  Job Object crash/hang isolation: ON\n";
     std::wcout << L"============================================================\n\n";
 
