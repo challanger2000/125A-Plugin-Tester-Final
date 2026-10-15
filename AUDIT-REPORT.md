@@ -2,15 +2,17 @@
 
 ## 1. Ergebnis, Geltungsbereich und Freigabegrenzen
 
-**Stand: 15. Oktober 2026 (Europe/Berlin). Dokumentationsaudit; keine Reparaturfreigabe.**
+**Stand: 15. Oktober 2026 (Europe/Berlin), fortgesetzte Prüfung. Dokumentationsaudit; keine Reparaturfreigabe.**
+
+**Aktueller Nachweisstand:** Die Erstprüfung bleibt als Verlauf erhalten. Die Fortsetzung in Abschnitt 12 ergänzt vier vorhandene erfolgreiche Windows-CI-Läufe samt Einzel-Schrittstatus und Artefaktmetadaten sowie 24 lokal ausgeführte Beobachtungen an unverändert extrahierter Logik. Vollständige CI-Logs, Binärdownloads, konkrete Nutzerpaketzuordnung, Windows-E2E-Reproduktionen der Befunde und Studio One bleiben offen. Abschnitt 13 enthält das reproduzierbare lokale Prüfverfahren.
 
 Alle im folgenden Komponentenverzeichnis genannten produktiven Projektdateien und ihre Schnittstellen wurden statisch untersucht. Dieser Bericht ist ohne die vorausgehende Unterhaltung verständlich. Er dokumentiert **9 durch Codeanalyse bestätigte Fehler, 4 Verdachtsbefunde und 8 abgegrenzte Verbesserungsvorschläge**. Kein Befund wurde in dieser Untersuchung unter Windows reproduziert. Es gibt keine CRITICAL-Einstufung und keine pauschale Fehlerfreiheits-, QA- oder FINAL-Freigabe.
 
-**Das vollständige technische Audit ist NICHT abgeschlossen:** vorhandene Windows-CI-Läufe und Artefakte waren wegen verweigerten GitHub-API-Zugriffs nicht zugänglich; Windows-Laufzeit-, Audio-/MIDI- und Studio-One-Nachweise fehlen. Die statische Bestandsaufnahme ist durchgeführt. Eine vollständige Dokumentation des untersuchten Umfangs ist kein vollständiger Laufzeitnachweis.
+**Das vollständige technische Audit ist NICHT abgeschlossen:** CI-Lauf-, Schritt- und Artefaktmetadaten wurden inzwischen über reguläre GitHub-Webseiten geprüft; vollständige Logs, heruntergeladene Binärartefakte, Windows-E2E-Reproduktionen sowie weitergehende Audio-/MIDI- und Studio-One-Nachweise fehlen. Die statische Bestandsaufnahme ist durchgeführt. Eine vollständige Dokumentation des untersuchten Umfangs ist kein vollständiger Laufzeitnachweis.
 
 Der Tester besitzt eine sinnvolle Grundlage aus Prozessisolation, offiziellem Validator und gezielten Fehler-Fixtures. Besonders relevant sind jedoch eigene Host-Vertragsverletzungen und widersprüchliche Ergebniswege: Ein FAIL kann vom Tester selbst verursacht werden; ein PASS kann unvollständig oder widersprüchlich sein. Deshalb dürfen Ergebnisse derzeit nur zusammen mit Einzelberichten, Exitcodes und tatsächlichem Prüfumfang beurteilt werden.
 
-**Autorisierter Änderungsumfang:** ausschließlich diese neue Audit-Dokumentation auf einem separaten Dokumentationsbranch. Keine Änderungen an Programmcode, Tests, CMake, Workflow, Ressourcen, bestehenden Dokumenten, Versionen, Tags oder Releases. Kein automatischer Merge, kein neuer CI-Lauf. Vorschläge sind keine genehmigten Reparaturen.
+**Autorisierter Änderungsumfang:** ausschließlich diese neue Audit-Dokumentation auf einem separaten Dokumentationsbranch. Keine Änderungen an Programmcode, Tests, CMake, Workflow, Ressourcen, bestehenden Dokumenten, Versionen, Tags oder Releases. Der Erstauftrag erlaubte keinen automatischen Merge. Für die Fortsetzung ist ausschließlich das Zusammenführen eines geprüften reinen Dokumentations-PRs ausdrücklich genehmigt; kein neuer CI-Lauf. Vorschläge sind keine genehmigten Reparaturen.
 
 ## 2. Audit-Metadaten und Herkunft
 
@@ -120,7 +122,7 @@ Fundstellen: [.github/workflows/build-windows.yml:16–151](https://github.com/c
 
 **README-Abweichungen:** „nur manuell“ ist falsch, da zusätzlich push auf main aktiviert ist. Sieben lose EXEs/vier Fixtures entsprechen nicht dem aktuellen Single-EXE-Paket mit zehn eingebetteten Helfern/sieben Fixtures. JSON und GUI sind bereits implementiert, obwohl als spätere Erweiterung erwähnt. Guardversionen sind zusätzlich veraltet (TESTER-004). Parser-Selbsttest ist implementiert, wird im aktuellen Workflow aber nicht aufgerufen.
 
-### 4.2 Beweisstatus
+### 4.2 Historischer Beweisstatus der Erstprüfung (aktuelle Ergänzung: Abschnitt 12)
 
 | Evidenzebene | Tatsächlich vorhanden / ausgeführt | Aussagegrenze |
 | --- | --- | --- |
@@ -520,7 +522,9 @@ Bis dahin bleibt die tatsächlich belegte Zuverlässigkeit auf statische Eigensc
 
 **Übergabe:** 9 CODE CONFIRMED / 0 RUNTIME CONFIRMED / 4 SUSPECTED / 8 ENHANCEMENT. Keine Reparatur umgesetzt. Der Titel des gewünschten Dokumentations-PRs lautet „AUDIT: Complete technical review of 125A Plugin Tester v0.2.9“; dieser Titel ersetzt nicht die hier ausdrücklich dokumentierten offenen Nachweise. GitHub-Berichtslink/PR-Link werden erst als vorhanden bezeichnet, wenn ihre Erstellung beziehungsweise der Branch-Push bestätigt ist.
 
-## 11. Bereitstellung und konkreter Zugangsblocker
+## 11. Historische Bereitstellung und damaliger Zugangsblocker
+
+**Historischer Stand vor PR #3:** Dieser Abschnitt bleibt zur Nachvollziehbarkeit erhalten. Inzwischen ist der Bericht über PR #3 auf main gelandet, per GitHub-Webseite und Raw-Abruf bestätigt. Für die Fortsetzung gilt die aktuelle Benutzerfreigabe für einen reinen Dokumentations-PR samt Merge. Der aktuelle Zugangsstatus steht in Abschnitt 12.
 
 Der Dokumentationsbranch wurde am 2026-10-15 erfolgreich über den vorhandenen GitHub-HTTPS-Git-Zugang gepusht und anschließend per git ls-remote verifiziert. main blieb unverändert auf dem untersuchten Quellcommit. Der Vergleich zur Prüfbasis enthält ausschließlich die neue AUDIT-REPORT.md; alle vorhandenen Dateien sind bytegleich.
 
@@ -531,3 +535,284 @@ Der Dokumentationsbranch wurde am 2026-10-15 erfolgreich über den vorhandenen G
 Der ausdrückliche Versuch mit gh pr create, Basis main, diesem Dokumentationsbranch, dem angeforderten Titel und einer vollständigen Dokumentationsbeschreibung scheiterte mit: Post https://api.github.com/graphql: Forbidden. Zuvor scheiterten Actions-/Release-Leseabfragen; curl zeigte bereits beim CONNECT-Tunnel einen Proxy-403. API-Zugang ist damit blockiert; daraus folgt weder ein fehlender GitHub-Token noch das Fehlen erfolgreicher CI-Läufe. Keine Tokenwerte wurden angefordert, ausgelesen oder dokumentiert.
 
 **Noch erforderlich:** erlaubter und autorisierter HTTPS-Zugang zu api.github.com für CI-/Artefaktlesen und PR-Erstellung. Danach die betroffenen Abfragen und PR-Erstellung erneut ausführen, tatsächlichen PR-Link ergänzen; niemals einen PR als erstellt behaupten, nur weil ein Formularlink existiert. Alternativ kann der Nutzer den Dokumentations-PR über das verlinkte GitHub-Formular anlegen. Kein Merge durchführen. Die Dokumentation ist bereits dauerhaft auf dem Remote-Branch vorhanden, die PR-Bereitstellung bleibt offen.
+
+## 12. Fortsetzung: zusätzliche Nachweise am aktuellen main
+
+### 12.1 Basis, Autorisierung und Grenzen
+
+Die Fortsetzung setzt auf main **12f92a702c4369de1e6d1b2075178a6a47cf4f2d** auf. [PR #3](https://github.com/challanger2000/125A-Plugin-Tester-Final/pull/3) ist auf der regulären GitHub-Webseite als Merged erkennbar; der Commit und der vollständige Bericht wurden über Git geprüft. Zusätzlich lieferte der Raw-Abruf von main HTTP 200. Der SHA-256 des übernommenen unveränderten Erstberichts lautet f5459f87456291079ac7e8687178dea7ea0469374e2fd4494ad5fafd85d3b6de. Damit ist die frühere Bereitstellung auf main nun nachgewiesen.
+
+Der Diff von 513cf9a zu diesem main enthält ausschließlich AUDIT-REPORT.md. Alle 30 zuvor vorhandenen Nicht-Audit-Dateien sind bytegleich. Die technischen Quellverweise der Erstprüfung bleiben deshalb gültig; die Untersuchung wurde nicht von vorn begonnen. Engineering START-HERE wurde zuerst erneut gelesen; Engineering-main ist weiterhin 304ebeb6c965949b3e389adf8109f9bcb333e8f8.
+
+Aktueller Arbeitsbranch: **docs/audit-evidence-continuation-2026-10-15**. Nur Audit-Dokumentation darf geändert werden. Ein ausschließlich dokumentierender PR darf laut Folgeauftrag selbst zusammengeführt werden; Code, Tests, Builddateien und Versionen bleiben unberührt. Neue CI-Läufe sind nicht freigegeben. Weil der vorhandene Workflow auf push nach main reagiert, soll ein etwaiger Dokumentations-Squash-Merge die unterstützte Kennzeichnung [skip ci] im Committext erhalten, statt den Workflow zu verändern.
+
+### 12.2 Zugangsprüfung: API blockiert, reguläre Webseiten nutzbar
+
+Die Versuche mit gh api für actions/runs und releases scheitern weiterhin mit Forbidden; HTTPS zu api.github.com wird bereits beim CONNECT-Tunnel mit Proxy-403 abgewiesen. Die gelesene veröffentlichte Umgebungskonfiguration enthält inzwischen bereits die Regel api.github.com. Eine weitere identische Domain-Ergänzung wäre deshalb keine neue Diagnose und wurde nicht angefordert. Die tatsächliche Laufzeitrouting-/Proxy-Freigabe ist trotz vorhandener Konfiguration nicht belegt. GH_TOKEN ist als Bindung vorhanden; sein Wert wurde weder angezeigt noch ausgelesen oder kopiert. Aus dem Proxyfehler folgt keine Aussage über die Gültigkeit dieses Tokens.
+
+Reguläre, rein lesende Abrufe von github.com und raw.githubusercontent.com funktionieren. So wurden vorhandene Actions-Seiten, Jobseiten, Artefaktmetadaten, die leere Releases-Seite, PR #3 und der Bericht auf main abgerufen. Das ist ein zusätzlicher zulässiger Nachweisweg; es wurden keine Authentifizierungssperren umgangen. Detail-Logs und Artefaktdownloads blieben hinter dem dortigen Zugriffsschutz: „Sign in to view logs“, Logabruf HTTP 404 und Artefaktabruf nach Weiterleitung auf die GitHub-suites-Seite HTTP 404. Ein fehlgeschlagener geschützter Abruf ist kein Beweis gelöschter Logs oder Artefakte.
+
+### 12.3 Tatsächlich geprüfte vorhandene Windows-CI-Läufe
+
+Aus der Actions-Übersicht wurden vollständige Quell-SHAs und Runzustände gelesen und mit den jeweiligen Run-/Jobseiten abgeglichen. Alle folgenden Läufe sind **COMPLETED / SUCCESS**. Es wurden keine neuen Läufe ausgelöst.
+
+| Run | Quellcommit | Erstellt (UTC; Europe/Berlin +02:00) | Job | Einzel-Schrittstatus |
+| --- | --- | --- | --- | --- |
+| [#6 / 38715638919](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38715638919) | 12f92a702c4369de1e6d1b2075178a6a47cf4f2d | 2026-10-15T09:48:20Z | [116357522714](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38715638919/job/116357522714) | 14 success, 1 skipped |
+| [#5 / 38649898071](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38649898071) | 513cf9a126d5a70ac2bb3c3da3990e9b3c8ab321 | 2026-10-14T22:46:26Z | [116145813231](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38649898071/job/116145813231) | 14 success, 1 skipped |
+| [#4 / 38645329416](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38645329416) | 6ddec5127aec2c207becdf841c5e56c7b5fb8128 | 2026-10-14T22:06:54Z | [116130639821](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38645329416/job/116130639821) | 14 success, 1 skipped |
+| [#3 / 37432640438](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/37432640438) | fd246146994384e301c735e7d860b53aa06b18c5 | 2026-10-06T07:54:46Z | [112166862097](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/37432640438/job/112166862097) | 14 success, 1 skipped |
+
+Bei allen vier Jobs wurden die folgenden **tatsächlich gemeldeten Schrittzustände** gelesen; sie stimmen mit dem Workflow am zugehörigen Commit überein:
+
+| Schritt | Name | Zustand in allen vier Jobs |
+| --- | --- | --- |
+| 1 | Set up job | success |
+| 2 | Checkout | success |
+| 3 | Configure | success |
+| 4 | Build | success |
+| 5 | Verify production Job Object guard | success |
+| 6 | Verify Steinberg validator self-test | success |
+| 7 | Verify tester specificity, sensitivity and JSON with VST3 fixtures | success |
+| 8 | Verify serial folder scan and aggregate JSON | success |
+| 9 | Stage single-file portable package | success |
+| 10 | Verify final portable EXE end to end | success |
+| 11 | Ensure only one public executable is shipped | success |
+| 12 | Upload fixture diagnostics on failure | skipped |
+| 13 | Upload package | success |
+| 26 | Post Checkout | success |
+| 27 | Complete job | success |
+
+**Was sich damit verbessert:** Windows-Build und die benannten vorhandenen automatischen QA-Gates sind auf Ebene der von GitHub gespeicherten Lauf-/Schrittmetadaten erfolgreich nachgewiesen. Der zuvor nur als Kandidat bekannte Quellcommit fd24614 besitzt einen erfolgreichen Windows-CI-Lauf; auch der genaue Erstprüfcommit 513cf9a und der aktuelle main 12f92a7 haben erfolgreiche Läufe. Die Erfolgsaussage ist somit stärker als bloß gelesener Workflowtext.
+
+**Was weiterhin fehlt:** Die Konsolenausgaben und einzelnen Testergebnisse waren nicht zugänglich. Deshalb werden weder konkrete Validator-Testzahlen noch einzelne Fixture-PASS-/FAIL-Zahlen als aus Logs verifiziert ausgegeben. Dass ein Schritt als success gespeichert ist, ersetzt keine nachträgliche Prüfung seiner Assertions, Testvollständigkeit oder eines Nutzerpakets. Der erwartungsgemäß übersprungene Fehlerdiagnostik-Upload ist kein übersprungener fachlicher Test. Windows-Laufzeitbelege gelten hier für die vorhandenen kontrollierten CI-Gates, nicht für unsere neu benannten Fehler-/Verdachtsfälle, beliebige Fremdplugins oder Studio One.
+
+Die früheren Abschnitte 2 und 4 sind als Erststand zu lesen: „keine zugänglichen CI-Nachweise“ ist durch diese Fortsetzung teilweise überholt; fehlende Binär-/Log- und Nutzerpaketnachweise bleiben bestehen. Bereits der Merge von PR #3 hat laut Run #6 einen bestehenden push-main-Workflow ausgelöst; dieser Lauf existierte vor dieser Fortsetzung und wurde hier nur gelesen.
+
+### 12.4 Artefakte, Prüfsummen und Releasezuordnung
+
+Jede der vier Runseiten zeigt ein Artefakt namens **125A-Plugin-Tester-Windows-x64**, Anzeigegröße **840 KB**:
+
+| Run | Artefakt-ID | Von GitHub angezeigter Artefakt-Digest |
+| --- | --- | --- |
+| 38715638919 | 11962902194 | sha256:81f1805269137daae917ea97322ff9cc06679103ae53ed8b45256016b4917061 |
+| 38649898071 | 11934626728 | sha256:52355758026ab3e6edacd28199ab9f2beb4332e49a7c2e4dc62ce5175fd35864 |
+| 38645329416 | 11931972211 | sha256:7485eb04094e4f4fa354d7ca0a3a25a6cfc54cb8002d69f671e05b43312453b1 |
+| 37432640438 | 11397432393 | sha256:3c0b8e2f9e29fe31ec02dbac08f14e3c3af4453b9fbebf808588d22774cc30a1 |
+
+Dies sind **abgelesene Metadaten**, keine lokal unabhängig überprüften Downloads. Der Digest darf nicht als SHA-256 der enthaltenen öffentlichen EXE oder des Nutzer-ZIPs 125A-Plugin-Tester-v0.2.9-Windows-x64 ausgegeben werden. Das Artefakt konnte nicht heruntergeladen werden; Inhalt, PE-Metadaten, eingebettete Helfer und Binärhashes sind deshalb weiterhin NOT VERIFIED. Unterschiedliche Digests bei gleicher technischer Quelle beweisen keine Fehlfunktion; deterministische Builds oder identische Paketbytes wurden nicht zugesichert.
+
+Die reguläre Releases-Seite antwortete HTTP 200 und zeigte „There aren’t any releases here“ ohne Release-Downloadlinks. Damit sind auf dieser zugänglichen Seite keine veröffentlichten GitHub-Releases ausgewiesen. Das schließt Actions-Artefakte oder ein externes Nutzerpaket ausdrücklich nicht aus.
+
+Die lokale Bestandsaufnahme fand keine Windows-EXE, kein ZIP und kein VST3-Binärartefakt des Testers. Lediglich eine mit dem SDK vorhandene drumLoop.wav wurde gefunden; sie wurde nicht als 125A-Referenzmaterial interpretiert oder verwendet. Eine vorhandene Quelldatei ist kein heruntergeladenes CI-Paket.
+
+### 12.5 Lokale ausgeführte Logikprüfung — 24 Beobachtungen
+
+**Ebene:** native Linux-C++-Prüfung unveränderter ausgewählter Quelltextabschnitte, kein Build oder Lauf der Windows-Anwendung. Compiler GCC 14.2.0, C++17, -O0. Es wurden ausschließlich temporäre Harness-/Ergebnisdateien unter /tmp/125a-audit-evidence erzeugt; keine Produktionsquelle, Repository-Testdatei oder Buildkonfiguration geändert.
+
+Die Funktionen wurden aus dem bytegleichen aktuellen Quellstand anhand fester Beginn-/Endmarkierungen extrahiert, nicht neu implementiert. Ein minimales Metadatenobjekt liefert BusInfo für den Buskonstruktor; die AudioBusBuffers- und Sampletypen stammen aus dem tatsächlich gepinnten SDK. Für die Klassifizierung liefert ein einfacher ReportPaths-Adapter ausschließlich Testdateinamen im Tempverzeichnis. GUI-Zeilen werden in einem Vektor gesammelt, nicht in Win32-Fenstern angezeigt. Weder echte Plugins noch Process-Aufrufe, Win32-Job Objects, CRT-Unicodeargumente oder GUI-Threads werden damit getestet.
+
+**Ergebnis:** 24 von 24 erwarteten Beobachtungen reproduziert; 0 Abweichungen von den vorab festgelegten Beobachtungen. Das bedeutet ausdrücklich **nicht**, dass die Software 24 korrekte Produktprüfungen bestanden hat: mehrere Erwartungen beschreiben die nachgewiesenen Fehler. Positive Kontrollen sichern ab, dass nicht einfach jede Eingabe fehlschlägt oder PASS liefert.
+
+| Bezug | Ausgeführte Beobachtung | Ergebnis und Reichweite |
+| --- | --- | --- |
+| TESTER-001 | inaktiver Stereo-Bus float und double | zweimal numChannels=2 bei null Kanalzeiger-Array; Hostdatenfehler lokal reproduziert |
+| TESTER-001 | aktiver Stereo-Bus float und double | zweimal zwei angelegte Samplepuffer; positive Kontrollen |
+| TESTER-002 | bloße RESULT-PASS-Zeile mit Exit 0, 1, 2, 124, 125, 126, 127 | siebenmal PASS; Fehler-Exitcodes werden tatsächlich überstimmt |
+| TESTER-002 | negative PASS-/WARNING-Zähler bei FAIL=0, Exit 126 | PASS; Plausibilitätslücke reproduziert |
+| TESTER-002 | gültiger FAIL-Bericht, gültiger WARNING-Bericht, kein Bericht, Guard plus QA | vier Gegenkontrollen liefern FAIL, WARNING, INCONCLUSIVE, INCONCLUSIVE |
+| TESTER-006 | Ordnersummary mit Discovery Error und Exit 1 | GUI-Statusfunktion liefert PASS |
+| TESTER-006 | fehlender Einzelbericht mit Exit 127 | obere Statusfunktion liefert INCONCLUSIVE, Kurztextfunktion daneben PASS; zwei Beobachtungen |
+| TESTER-006 | expliziter FAIL-Befund | Kurztextfunktion liefert FAIL; Gegenkontrolle |
+| TESTER-007 | normal beschreibbarer Bericht | true; positive Kontrolle |
+| TESTER-007 | unabhängiger Schreib-/Flushversuch auf /dev/full | Fehlerzustand; Betriebssystem-Fehlerquelle geprüft |
+| TESTER-007 | große Berichtsausgabe auf /dev/full | Reporter::write liefert dennoch true; Fehlerweitergabelücke lokal reproduziert |
+| TESTER-021 | vorhandener runValidatorParserSelfTest | Rückgabewert 0; drei enthaltene synthetische Parserfälle akzeptiert, kein offizieller Steinberg-Validatorlauf |
+
+Gesamter ungekürzter Laufoutput:
+
+~~~text
+OBSERVED 001 inactive float bus: numChannels=2 and array=null
+OBSERVED 001 inactive double bus: numChannels=2 and array=null
+OBSERVED 001 active float control: two allocated buffers
+OBSERVED 001 active double control: two allocated buffers
+OBSERVED 002 bare PASS summary overrides exit 0
+OBSERVED 002 bare PASS summary overrides exit 1
+OBSERVED 002 bare PASS summary overrides exit 2
+OBSERVED 002 bare PASS summary overrides exit 124
+OBSERVED 002 bare PASS summary overrides exit 125
+OBSERVED 002 bare PASS summary overrides exit 126
+OBSERVED 002 bare PASS summary overrides exit 127
+OBSERVED 002 negative counters accepted as PASS
+OBSERVED 002 FAIL control
+OBSERVED 002 WARNING control
+OBSERVED 002 missing report control is INCONCLUSIVE
+OBSERVED 002 guard control overrides QA
+OBSERVED 006 discovery error plus exit1 gives GUI PASS
+OBSERVED 006 missing plugin report plus exit127 top status is INCONCLUSIVE
+OBSERVED 006 same missing report short explanation is PASS
+OBSERVED 006 FAIL explanation control
+OBSERVED 007 normal writable report control
+OBSERVED 007 independent /dev/full write fails
+OBSERVED 007 Reporter::write nevertheless returns true on /dev/full
+OBSERVED 021 existing validator parser selftest
+TOTAL=24 OBSERVATIONS_MATCHED=24 MISMATCHES=0
+~~~
+
+SHA-256 des erzeugten C++-Harness: b464f888e9bfe04f736c6d11b4ddc75eb84dcc5e935758203c66155886b909d1. SHA-256 der Ergebnisdatei: ada0db125b21573f91273ef2561d7957b1f9fcbd85db9a6e90bfcc7b89fb594c. SHA-256 des unten dokumentierten Extraktions-/Testskripts: 2cd635c5cdb9cba6e6e44edb281067b03bfe68a337c61d127c323592f30bcf05. Die einzelnen extrahierten Funktionen und deren Hashes werden im Skript erzeugt. Hashes identifizieren dieses lokale Experiment, nicht die öffentliche Windows-EXE.
+
+### 12.6 Erneute Bewertung aller bisherigen IDs
+
+Keine IDs gelöscht, keine Reparatur behauptet, kein Verdacht ohne geeignete Reproduktion zu einem Windows-Fehler hochgestuft. Alle Befundstatus bleiben OPEN. Die Anzahl bleibt **9 bestätigte Fehler, 4 Verdachtsfälle, 8 Verbesserungen**. Von den neun Codebefunden besitzen vier jetzt zusätzliche lokale Logikreproduktionen; es gibt weiterhin **0 neu ausgeführte Windows-E2E-Reproduktionen dieser Befunde**.
+
+| ID | Neuer Prüfstand / zusätzliche Evidenz | Nachweisklasse und offene Grenze |
+| --- | --- | --- |
+| TESTER-001 | exakt extrahierter Worker-Buskonstruktor erzeugt in beiden Sampletypen das beanstandete Array; aktive Gegenkontrollen korrekt | CODE CONFIRMED + lokal reproduzierte Konstruktorlogik; tatsächliche Pluginreaktion offen |
+| TESTER-002 | sieben Exitvarianten, negative Zähler und vier Gegenkontrollen ausgeführt | CODE CONFIRMED + lokal reproduzierte Klassifizierungslogik; Windows-Prozesskette offen |
+| TESTER-003 | unveränderter Skip-/Permission-Fehlerpfad erneut geprüft; CI-Ordnerscan hat nur lesbare einfache Fixtures | CODE CONFIRMED; keine Windows-ACL-Reproduktion |
+| TESTER-004 | Ressourcen 0.2.0, Launcher/Guard 0.2.5 und Projekt 0.2.9 erneut abgeglichen | CODE CONFIRMED; tatsächliche PE-Metadaten des Artefakts/Nutzerpakets offen |
+| TESTER-005 | weiterhin kein setComponentHandler-Aufruf; aktuelle Controllerpfade und gepinnter SDK-Vertrag unverändert | CODE CONFIRMED; kein strenges Controller-/Editorfixture ausgeführt |
+| TESTER-006 | Discovery-Fehler-PASS und widersprüchliche Status-/Kurztexte lokal ausgeführt, FAIL-Gegenkontrolle vorhanden | CODE CONFIRMED + lokal reproduzierte Text-/Statuslogik; keine Win32-Fensterprüfung |
+| TESTER-007 | Reporter-Methode mit realem Linux-I/O-Fehler und normaler Datei ausgeführt | CODE CONFIRMED + lokaler I/O-Logiknachweis; Windows-Sperr-/Volume-/Annotationspfade offen |
+| TESTER-008 | Latenz/Tail stehen weiterhin vor erstem Processing-Setup | CODE CONFIRMED; keine rateabhängige Runtimekontrolle |
+| TESTER-009 | unveränderte Controller-Creation-/N/A-Pfade erneut abgeglichen; vorhandene sieben Fixtures decken diese Fälle nicht ab | CODE CONFIRMED; keine Windows-Mehrklassen-/Controllerfehlerkontrolle |
+| TESTER-010 | keine Windows-CRT/Codepage verfügbar; erfolgreiche ASCII-CI-Gates entscheiden den Verdacht nicht | SUSPECTED unverändert |
+| TESTER-011 | weiterhin feste gemeinsame Reportziele; serielle CI prüft keine zwei parallelen Sitzungen | SUSPECTED; keine tatsächliche Fehlzuordnung reproduziert |
+| TESTER-012 | vorhandener Guard-Schritt success belegt einfache Guard-Gates, nicht äußeren Elternabbruch oder Enkelprozessfreiheit | SUSPECTED; spezifischer Prozessbaumtest fehlt |
+| TESTER-013 | keine Mix-FX-Spezifikation oder passende Binärkontrolle verfügbar; Standardfixtures entscheiden host-spezifischen Vertrag nicht | SUSPECTED unverändert |
+| TESTER-014 | State-Fixture speichert weiterhin keine nichtstandardmäßigen Werte; CI-Schritt success zeigt API-/Defekterkennung, keine semantische Recallmessung | ENHANCEMENT; Erweiterungsnutzen bleibt begründet |
+| TESTER-015 | Setupmatrix versus tatsächliches 48-kHz/512-Processing und bevorzugtes Format erneut abgeglichen | ENHANCEMENT; keine zusätzliche Render-Matrix ausgeführt |
+| TESTER-016 | Bypass-/Parameter-Fixtures und Audioorakel fehlen weiterhin; Stille/finite Samples belegen keine Wirkung | ENHANCEMENT; keine Klang-/Wirkungsaussage |
+| TESTER-017 | ein Eventblock, acht Paare und 64 Outputplätze unverändert; keine MIDI-fähige CI-Fixture | ENHANCEMENT; Tempo/Transport/NoteOff nicht dynamisch geprüft |
+| TESTER-018 | vorhandene Editor-Fixture-Gates laut Einzel-Schrittstatus success; keine gleichzeitige Audio-/Automations-/DAW-Bedienprüfung | ENHANCEMENT; keine Studio-One-GUI-Freigabe |
+| TESTER-019 | Durchschnittszeit und schneller stiller Loop weiterhin keine p99-/Deadline-/Callbackallokationsmessung | ENHANCEMENT; keine Echtzeitsicherheitsbehauptung |
+| TESTER-020 | alle sieben vorhandenen Fixture-Gates im zusammengefassten Schritt success; SDK-Basis meldet nur Sample32, 64-Bit-Zweige werden nicht angekündigt | ENHANCEMENT; konkrete zusätzliche positive/negative Kontrollen bleiben nötig |
+| TESTER-021 | vorhandener Parser-Selbsttest lokal erfolgreich; Artefakt-Digests jetzt sichtbar, Binärhashes und detaillierte Stufen-/Klassenprovenienz weiter offen | ENHANCEMENT; kein Großrefactoring empfohlen |
+
+Erfolgreiche bestehende CI-Gates widerlegen die gefundenen Fehler nicht: Die Kontrollen prüfen gerade nicht alle inaktiven Busse, strenge Handlerpflichten, I/O-Ausfälle, widersprüchlichen Reports oder parallelen Sessions. Zugleich wäre es falsch, aus den statischen Befunden das Versagen aller realen Plugins oder einen generell unbrauchbaren Tester abzuleiten.
+
+### 12.7 Aktualisierte Bereichsbewertung und verbleibende Voraussetzungen
+
+| Prüfbereich | Jetzt tatsächlich belegt | Weiterhin NOT VERIFIED / Hindernis |
+| --- | --- | --- |
+| aktuelle Quelle / Bericht auf main | Git-SHAs, bytegleiche technische Quelle, PR #3 Merged auf Webseite, Raw-Bericht HTTP 200 und Hash | aktualisierte Fortsetzung muss noch über neuen PR auf main gelangen |
+| vorhandene Windows-CI | vier Runs und ihre einzelnen QA-Schritte als success/skipped abgelesen | vollständige geschützte Konsolenlogs, Validator-/Fixture-Einzelzahlen |
+| Buildartefakte | vier IDs, Namen, Anzeigegrößen und angezeigte Digests | geschützter Download; keine unabhängige Digest-/Inhalts-/EXE-Prüfung |
+| vorhandenes Nutzerpaket | Name vom Nutzer bekannt | konkrete Paketdatei, SHA-256 und Abgleich mit CI-Artefakt fehlen |
+| interne Auswertung / Reports | 24 lokale Beobachtungen einschließlich vier reproduzierter Codebefunde und Parserkontrolle | kein vollständiger Windows-Prozess-/GUI-E2E-Lauf |
+| Audio-/MIDI-Verarbeitung | statische Prüfung; vorhandene einfache CI-Fixture-Gates laut Schrittstatus erfolgreich | kein lokales Windows-/Pluginbinärartefakt, keine realen Render-/Event-/Transportmessungen |
+| VST3-Konformität | gepinnter Vertrag geprüft, bestehender Validator-Selbsttest-Schritt success | keine vollständigen Logs, keine allgemeine Validatorfreigabe für Nutzerplugins |
+| State / Automation | API-/Fehler-Fixture-Gates laut Schrittstatus; Quellabdeckung bekannt | semantische Zustands-/Audio-/MIDI-Wiederherstellung und Automationwirkung fehlen |
+| GUI-Lifecycle | bestehender Good-/BadEditor-Gateschritt success | keine Win32-Desktop-/Audio-/Skalierungs-/Bedienprüfung durch Auditor |
+| Absturzsicherheit | bestehender Produktionsguard-Gateschritt success | äußere Eltern-/Enkelprozesse, Parallelität und spezielle Fehlerpfade nicht nachgewiesen |
+| Echtzeit | statische Grenzen der Messung dokumentiert | kein getakteter Echtzeitlauf, p95/p99/max/Overruns/Callbackinstrumentierung |
+| Studio One | kein neuer Nachweis | reale Windows-DAW, repräsentative Plugins/Projekte und kontrollierte Bedienprüfung fehlen |
+| PR-/Merge-Zugang | Git-Push verfügbar, öffentliche GitHub-Webseiten lesbar | GitHub API/GraphQL weiterhin Proxy-403, keine authentifizierte Web-Schreibsitzung verfügbar |
+
+Die vorhandene Linux-Maschine enthält weder Wine/wine64 noch PowerShell oder eine Windows-Laufzeit. Ein Linux-Extraktionsharness ist hierfür kein Ersatz. Neue Windows-CI wurde nicht gestartet. Für die nächsten Schritte sind ein funktionierender autorisierter API-/Artefaktzugang, vorhandene herunterladbare Logs/Pakete und ein geeigneter Windows-/Studio-One-Prüfplatz erforderlich; keine neuen geheimen Werte im Chat anfordern.
+
+**Gesamtstatus: UNVOLLSTÄNDIG.** Die Fortsetzung hat die CI-Herkunft wesentlich besser belegt und vier Logikbefunde lokal reproduziert. Sie rechtfertigt weder vollständige QA-/FINAL-Freigabe noch Reparaturen ohne separate Freigabe. Die wichtigsten Reparaturprioritäten aus Abschnitt 8 bleiben bestehen; zuerst gültige Hostdaten/Handler und verlässliche Status-/Reportweitergabe.
+
+## 13. Reproduzierbares temporäres Prüfverfahren der Fortsetzung
+
+Das folgende Skript ist ausschließlich Audit-Dokumentation. Es ändert keine Repositorydateien, extrahiert unveränderte Funktionen und schreibt Harness/Ergebnisse unter /tmp. Voraussetzung: lesbarer geprüfter Checkout, GCC/C++17 und die oben dokumentierte SDK-Kopie. Pfade gegebenenfalls an die eigene isolierte Prüfumgebung anpassen. Die erwarteten Beobachtungen umfassen bewusst Fehlerreproduktionen; der Exitcode 0 des Harness bedeutet Übereinstimmung mit diesen Beobachtungen und keine Produktfreigabe.
+
+~~~python
+from pathlib import Path
+import hashlib, json, subprocess
+root=Path('/workspace/125A-Plugin-Tester-Final')
+out=Path('/tmp/125a-audit-evidence')
+chunks=[]
+def part(file,start,end):
+    s=(root/file).read_text(); a=s.index(start); b=s.index(end,a)
+    text=s[a:b]
+    chunks.append({'file':file,'start_line':s[:a].count('\n')+1,'end_line':s[:b].count('\n'),'sha256':hashlib.sha256(text.encode()).hexdigest()})
+    return text
+headers='''#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdio>
+#include <cwctype>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+#include "pluginterfaces/vst/ivstaudioprocessor.h"
+namespace fs=std::filesystem;
+'''
+bus=part('src/main.cpp','template <typename Sample>\nstruct TestBusStorage','template <typename Sample>\nbool hasActiveBuffers')
+reporter=part('src/main.cpp','enum class Level','std::string toUtf8')
+classifier=part('src/dispatcher.cpp','bool readTextFile(const fs::path& path, std::string& text)','std::vector<std::string> extractFindings')
+enum=part('src/dispatcher.cpp','enum class ScanStatus','const wchar_t* statusLabel')
+gui_path=part('src/gui.cpp','bool isVst3Path','std::wstring readControlText')
+gui_status=part('src/gui.cpp','int summaryCount','std::wstring trimLine')
+gui_summary=part('src/gui.cpp','std::wstring firstFinding','struct ProgressInfo')
+parser=part('src/launcher_diagnostics.cpp','struct ValidatorFailure','bool parseQaCounts')
+trim=part('src/launcher.cpp','std::string trimAscii','std::string validatorFailureSummary')
+parser_selftest=part('src/launcher_diagnostics.cpp','int runValidatorParserSelfTest()','std::string tresultName')
+text=headers+'namespace BusProbe {\nusing namespace Steinberg; using namespace Steinberg::Vst;\nstruct IComponent { bool active; int32 getBusCount(MediaType,BusDirection){return 1;} tresult getBusInfo(MediaType,BusDirection,int32,BusInfo& b){b.channelCount=2;b.flags=active?BusInfo::kDefaultActive:0;return kResultTrue;} };\n'+bus+'}\n'+reporter
+text+='namespace ReportPaths { fs::path root; fs::path guard(const fs::path& p){return root/(p.filename().string()+".guard");} fs::path qa(const fs::path& p){return root/(p.filename().string()+".qa");} }\n'
+text+=enum+classifier
+text+='std::vector<std::pair<std::wstring,std::wstring>> rows; void addResultRow(const std::wstring&a,const std::wstring&b){rows.emplace_back(a,b);}\n'
+text+=gui_path+gui_status+gui_summary+trim+parser+parser_selftest
+text+=r'''
+int total=0, failures=0;
+void observe(const std::string& name,bool yes){++total;if(!yes)++failures;std::cout<<(yes?"OBSERVED ":"MISMATCH ")<<name<<'\n';}
+void writeQA(const std::string& s){std::ofstream(ReportPaths::qa("test.vst3"))<<s;}
+int main(int argc,char**argv){
+ if(argc!=2)return 2;ReportPaths::root=argv[1];fs::create_directories(ReportPaths::root);
+ BusProbe::IComponent inactive{false},active{true};
+ auto i32=BusProbe::makeAudioBuses<Steinberg::Vst::Sample32>(&inactive,Steinberg::Vst::kInput,512);
+ auto i64=BusProbe::makeAudioBuses<Steinberg::Vst::Sample64>(&inactive,Steinberg::Vst::kInput,512);
+ auto a32=BusProbe::makeAudioBuses<Steinberg::Vst::Sample32>(&active,Steinberg::Vst::kInput,512);
+ auto a64=BusProbe::makeAudioBuses<Steinberg::Vst::Sample64>(&active,Steinberg::Vst::kInput,512);
+ observe("001 inactive float bus: numChannels=2 and array=null",i32[0].bus.numChannels==2&&i32[0].bus.channelBuffers32==nullptr);
+ observe("001 inactive double bus: numChannels=2 and array=null",i64[0].bus.numChannels==2&&i64[0].bus.channelBuffers64==nullptr);
+ observe("001 active float control: two allocated buffers",a32[0].bus.channelBuffers32&&a32[0].bus.channelBuffers32[0]&&a32[0].bus.channelBuffers32[1]);
+ observe("001 active double control: two allocated buffers",a64[0].bus.channelBuffers64&&a64[0].bus.channelBuffers64[0]&&a64[0].bus.channelBuffers64[1]);
+ const std::string good="RESULT: 1 PASS / 0 WARNING / 0 FAIL\n";
+ for(int code:{0,1,2,124,125,126,127}){writeQA(good);observe("002 bare PASS summary overrides exit "+std::to_string(code),classifyResult("test.vst3",code)==ScanStatus::Pass);}
+ writeQA("RESULT: -2 PASS / -1 WARNING / 0 FAIL\n");observe("002 negative counters accepted as PASS",classifyResult("test.vst3",126)==ScanStatus::Pass);
+ writeQA("RESULT: 0 PASS / 0 WARNING / 1 FAIL\n");observe("002 FAIL control",classifyResult("test.vst3",1)==ScanStatus::Fail);
+ writeQA("RESULT: 1 PASS / 1 WARNING / 0 FAIL\n");observe("002 WARNING control",classifyResult("test.vst3",0)==ScanStatus::Warning);
+ fs::remove(ReportPaths::qa("test.vst3"));observe("002 missing report control is INCONCLUSIVE",classifyResult("test.vst3",0)==ScanStatus::Inconclusive);
+ writeQA(good);std::ofstream(ReportPaths::guard("test.vst3"))<<"RESULT: TEST INCONCLUSIVE\n";observe("002 guard control overrides QA",classifyResult("test.vst3",0)==ScanStatus::Inconclusive);
+ observe("006 discovery error plus exit1 gives GUI PASS",statusFor("folder",1,L"FOUND: 1\nPASS: 1\nWARNING: 0\nFAIL: 0\nINCONCLUSIVE: 0\nDISCOVERY_ERRORS: 1\n")==L"PASS");
+ observe("006 missing plugin report plus exit127 top status is INCONCLUSIVE",statusFor("test.vst3",127,L"")==L"INCONCLUSIVE");
+ rows.clear();addPlainLanguageSummary(L"");observe("006 same missing report short explanation is PASS",!rows.empty()&&rows[0].second.rfind(L"PASS",0)==0);
+ rows.clear();addPlainLanguageSummary(L"[FAIL] deterministic problem\n");observe("006 FAIL explanation control",!rows.empty()&&rows[0].second.rfind(L"FAIL",0)==0);
+ Reporter r;std::ostringstream discard;auto* old=std::cout.rdbuf(discard.rdbuf());r.add(Level::Pass,"large detail",std::string(32768,'X'));std::cout.rdbuf(old);
+ observe("007 normal writable report control",r.write(ReportPaths::root/"normal.txt","test.vst3"));
+ std::ofstream sink("/dev/full",std::ios::binary);sink<<std::string(32768,'X');sink.flush();observe("007 independent /dev/full write fails",!sink);
+ observe("007 Reporter::write nevertheless returns true on /dev/full",r.write("/dev/full","test.vst3"));
+ observe("021 existing validator parser selftest",runValidatorParserSelfTest()==0);
+ std::cout<<"TOTAL="<<total<<" OBSERVATIONS_MATCHED="<<(total-failures)<<" MISMATCHES="<<failures<<'\n';return failures?1:0;
+}
+'''
+(out/'logic_harness.cpp').write_text(text)
+(out/'extracted-functions.json').write_text(json.dumps(chunks,indent=2)+'\n')
+compile_cmd=['c++','-std=c++17','-O0','-I/workspace/.onboarding-build/125a/_deps/vst3sdk-src',str(out/'logic_harness.cpp'),'-o',str(out/'logic_harness')]
+subprocess.run(compile_cmd,check=True)
+r=subprocess.run([str(out/'logic_harness'),str(out/'reports')],text=True,capture_output=True)
+(out/'logic-results.txt').write_text(r.stdout+r.stderr)
+print(r.stdout,end=''); print(r.stderr,end='')
+print('HARNESS_SHA256='+hashlib.sha256(text.encode()).hexdigest())
+print('COMPILER='+subprocess.check_output(['c++','-dumpfullversion'],text=True).strip())
+raise SystemExit(r.returncode)
+~~~
+
+Aufruf: python3 /tmp/125a-audit-evidence/extract_and_test.py, nachdem der Skripttext dort abgelegt wurde. Die erzeugten extrahierten Quellabschnitte sind anhand Datei, Zeilen und SHA-256 in extracted-functions.json identifizierbar. Das Verfahren kann nur den hier benannten Logikumfang reproduzieren.
+
+### Fortsetzungsprotokoll / Statusänderungen
+
+| Datum | Änderung | Begründung |
+| --- | --- | --- |
+| 2026-10-15, Fortsetzung | Quelle/Erstbericht auf main 12f92a7 bestätigt | PR #3 und HTTP-200-Raw-Abruf plus SHA-256; ursprünglicher Bereitstellungsblocker historisch überholt |
+| 2026-10-15, Fortsetzung | CI-Zugänglichkeit teilweise von NOT VERIFIED auf Metadaten verifiziert erweitert | reguläre GitHub-Webseiten liefern vier erfolgreiche Runs und konkrete Schrittstatus trotz gesperrter API |
+| 2026-10-15, Fortsetzung | Artefaktmetadaten ergänzt; keine Binärverifikation behauptet | vier IDs/Digests sichtbar, Download bleibt geschützt |
+| 2026-10-15, Fortsetzung | TESTER-001/-002/-006/-007: zusätzlicher lokaler Logiknachweis | unverändert extrahierte Funktionen mit Gegenkontrollen; keine Windows-E2E-Hochstufung |
+| 2026-10-15, Fortsetzung | TESTER-021: vorhandener Parser-Selbsttest lokal ausgeführt | Rückgabewert 0; kein offizieller Validatorlauf |
+| 2026-10-15, Fortsetzung | alle übrigen IDs erhalten und erneut nach Evidenzlage bewertet | keine unberechtigte FIXED-/REJECTED-/APPROVED-Änderung; keine Reparatur |
