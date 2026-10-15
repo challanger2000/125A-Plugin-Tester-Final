@@ -8,6 +8,7 @@
 #include "pluginterfaces/vst/vstspeaker.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstevents.h"
+#include <windows.h>
 
 #include <algorithm>
 #include <atomic>
@@ -80,6 +81,14 @@ constexpr const char* kPluginName = "125A QA Good Event Echo";
 const FUID kProcessorUID(0x125A1013, 0x20261015, 0x00000000, 0x00000014);
 const FUID kControllerUID(0x125A2013, 0x20261015, 0x00000000, 0x00000024);
 constexpr const char* kPluginName = "125A QA Bad Missing Event";
+#elif QA_FIXTURE_KIND == 14
+const FUID kProcessorUID(0x125A1014, 0x20261015, 0x00000000, 0x00000015);
+const FUID kControllerUID(0x125A2014, 0x20261015, 0x00000000, 0x00000025);
+constexpr const char* kPluginName = "125A QA Bad Callback Heap";
+#elif QA_FIXTURE_KIND == 15
+const FUID kProcessorUID(0x125A1015, 0x20261015, 0x00000000, 0x00000016);
+const FUID kControllerUID(0x125A2015, 0x20261015, 0x00000000, 0x00000026);
+constexpr const char* kPluginName = "125A QA Bad Callback Lock";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -370,6 +379,12 @@ public:
 #endif
 
     tresult PLUGIN_API process(ProcessData& data) override {
+#if QA_FIXTURE_KIND == 14
+        void* allocation = ::HeapAlloc(::GetProcessHeap(), 0, 128);
+        if (allocation) ::HeapFree(::GetProcessHeap(), 0, allocation);
+#elif QA_FIXTURE_KIND == 15
+        (void)::WaitForSingleObject(::GetCurrentThread(), 1);
+#endif
 #if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13
         if (data.inputEvents && data.outputEvents) {
             const int32 total = data.inputEvents->getEventCount();
