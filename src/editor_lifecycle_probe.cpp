@@ -271,9 +271,14 @@ int runEditorLifecycle(const fs::path& pluginPath) {
         stage.mark(std::string("class ") + classInfo.name().data() + " - controller acquire/connect");
         if (!acquireController(component.get(), factory, hostContext, controller, controllerError)) {
             component->terminate();
-            std::cout << "[INFO] Editor lifecycle - " << classInfo.name().data()
-                      << " has no usable edit controller (" << controllerError << ")\n";
-            continue;
+            if (controllerError == "component exposes no edit controller class") {
+                std::cout << "[INFO] Editor lifecycle - " << classInfo.name().data()
+                          << " has no edit controller\n";
+                continue;
+            }
+            std::cerr << "[FAIL] Editor lifecycle - " << classInfo.name().data()
+                      << ": " << controllerError << '\n';
+            return 1;
         }
 
         bool classHasEditor = false;
