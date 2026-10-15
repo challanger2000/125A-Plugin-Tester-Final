@@ -4,6 +4,7 @@
 #include "base/source/fobject.h"
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/gui/iplugview.h"
+#include "pluginterfaces/gui/iplugviewcontentscalesupport.h"
 #include "pluginterfaces/vst/vstspeaker.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstevents.h"
@@ -88,7 +89,7 @@ constexpr const char* kPluginName = "125A QA Bad Missing Event";
 int gEditorRemovedCount = 0;
 std::atomic<bool> gEditorAttached{false};
 
-class QAFixtureView final : public FObject, public IPlugView {
+class QAFixtureView final : public FObject, public IPlugView, public IPlugViewContentScaleSupport {
 public:
     ~QAFixtureView() override {
         if (frame_)
@@ -154,6 +155,19 @@ public:
         return kResultTrue;
     }
 
+    tresult PLUGIN_API setContentScaleFactor(ScaleFactor factor) override {
+        if (!std::isfinite(factor) || factor < 0.5f || factor > 3.0f)
+            return kResultFalse;
+        rect_.right = static_cast<int32>(320.0f * factor);
+        rect_.bottom = static_cast<int32>(180.0f * factor);
+        if (frame_) {
+            ViewRect request = rect_;
+            if (frame_->resizeView(this, &request) != kResultTrue)
+                return kResultFalse;
+        }
+        return kResultTrue;
+    }
+
     tresult PLUGIN_API canResize() override { return kResultFalse; }
 
     tresult PLUGIN_API checkSizeConstraint(ViewRect* rect) override {
@@ -163,6 +177,7 @@ public:
     OBJ_METHODS(QAFixtureView, FObject)
     DEFINE_INTERFACES
         DEF_INTERFACE(IPlugView)
+        DEF_INTERFACE(IPlugViewContentScaleSupport)
     END_DEFINE_INTERFACES(FObject)
     REFCOUNT_METHODS(FObject)
 
