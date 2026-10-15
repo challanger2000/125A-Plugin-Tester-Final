@@ -99,7 +99,7 @@ jobs:
             if ($ioText.Contains("Result: FAIL") -and $ioText.Contains("FirstFailure: None")) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe reported FAIL without a concrete first failure" }
             if ($requiredIoText -and -not $ioText.Contains($requiredIoText)) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe did not contain expected evidence: $requiredIoText" }
             $editorText = Get-Content $editorProbe.FullName -Raw
-            if (-not $editorText.Contains("Version: 0.2.9")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
+            if (-not $editorText.Contains("Version: 0.2.10")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
             if ($requiredEditorText -and -not $editorText.Contains($requiredEditorText)) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe did not contain expected evidence: $requiredEditorText" }
             $jsonData = Get-Content $json.FullName -Raw | ConvertFrom-Json
             if ($jsonData.schemaVersion -ne 1) { throw "$name JSON schemaVersion was not 1" }
@@ -113,7 +113,7 @@ jobs:
           Run-Fixture "125A_QA_BadLifecycle" 1 "FAIL" "[FAIL] Audio torture processing state (32-bit) - setProcessing(true) failed"
           Run-Fixture "125A_QA_BadNaN" 1 "FAIL" "[FAIL] Audio Silence process (32-bit)"
           Run-Fixture "125A_QA_BadState" 1 "FAIL" "[FAIL] Component state roundtrip - setState rejected the state returned by getState"
-          Run-Fixture "125A_QA_BadIgnoredState" 1 "FAIL" "[FAIL] Fresh-instance state probe"
+          Run-Fixture "125A_QA_BadIgnoredState" 1 "FAIL" "[FAIL] Fresh-instance state verification"
           Run-Fixture "125A_QA_Bad64Bit" 1 "FAIL" "[FAIL] Audio Silence process (64-bit)"
           Run-Fixture "125A_QA_GainReference" 0 "PASS" "[PASS] Semantic state reference - Restored state recovered the measured gain response"
           Run-Fixture "125A_QA_BadGain" 1 "FAIL" "[FAIL] Functional reference profile"
@@ -148,7 +148,7 @@ jobs:
           $progressTxt = Join-Path $env:125A_PLUGIN_TESTER_REPORT_DIR "125A_Folder_Scan_Progress.txt"
           foreach ($p in @($summaryTxt,$summaryJson,$progressTxt)) { if (-not (Test-Path $p)) { throw "Folder scan output missing: $p" } }
           $text = Get-Content $summaryTxt -Raw
-          foreach ($required in @("Version: 0.2.9","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
+          foreach ($required in @("Version: 0.2.10","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
           $progressText = Get-Content $progressTxt -Raw
           foreach ($required in @("state=complete","total=2","current=2","pass=1","fail=1")) { if (-not $progressText.Contains($required)) { throw "Folder scan progress missing: $required" } }
           $jsonData = Get-Content $summaryJson -Raw | ConvertFrom-Json
