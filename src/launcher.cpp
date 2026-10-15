@@ -229,7 +229,7 @@ void writeGuardReport(const fs::path& pluginPath,
     }
 
     out << "125A Plugin Tester / Quality Checker\n";
-    out << "Version: 0.2.5\n";
+    out << "Version: 0.2.10\n";
     out << "Guard: crash-isolated launcher with Windows Job Object containment\n";
     out << "Plugin: " << pluginPath.string() << "\n\n";
     out << "[FAIL] " << finding << " - " << detail << "\n\n";
