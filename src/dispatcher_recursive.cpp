@@ -153,9 +153,12 @@ int runFolderScanRobust(const fs::path& singleExe, const fs::path& root) {
     }
 
     const AggregateCounts counts = aggregateCounts(entries);
-    if (!writeFolderSummary(root, entries, discovery.errors))
-        std::wcerr << L"[WARN] Folder scan - Could not write aggregate TXT/JSON summary\n";
-    writeFolderProgress(plugins.size(), plugins.size(), entries, {}, "complete");
+    const bool summaryWritten = writeFolderSummary(root, entries, discovery.errors);
+    if (!summaryWritten)
+        std::wcerr << L"[FAIL] Folder scan - Could not write aggregate TXT/JSON summary\n";
+    const bool finalProgressWritten = writeFolderProgress(plugins.size(), plugins.size(), entries, {}, "complete");
+    if (!finalProgressWritten)
+        std::wcerr << L"[WARN] Folder scan - Could not write final progress report\n";
 
     std::wcout << L"============================================================\n";
     std::wcout << L"  VST3 FOLDER SCAN COMPLETE\n";
@@ -169,7 +172,7 @@ int runFolderScanRobust(const fs::path& singleExe, const fs::path& root) {
     std::wcout << L"  Summary JSON: " << ReportPaths::folderSummaryJson().wstring() << L'\n';
     std::wcout << L"============================================================\n";
 
-    return (counts.fail > 0 || counts.inconclusive > 0 || !discovery.errors.empty()) ? 1 : 0;
+    return (counts.fail > 0 || counts.inconclusive > 0 || !discovery.errors.empty() || !summaryWritten || !finalProgressWritten) ? 1 : 0;
 }
 
 } // namespace
