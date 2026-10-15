@@ -608,6 +608,10 @@ void runSustainedProcessing(IAudioProcessor* processor,
     const auto start = std::chrono::steady_clock::now();
     uint64 nonFinite = 0;
     int processed = 0;
+    std::vector<double> blockTimesUs;
+    blockTimesUs.reserve(blocks);
+    int deadlineOverruns = 0;
+    constexpr double deadlineUs = 1000000.0 * numSamples / 48000.0;
     for (int i = 0; i < blocks; ++i) {
         clearOutputBuses(outputStorage);
         for (size_t b = 0; b < outputs.size(); ++b) outputs[b] = outputStorage[b].bus;
@@ -621,7 +625,13 @@ void runSustainedProcessing(IAudioProcessor* processor,
         data.inputs = inputs.empty() ? nullptr : inputs.data();
         data.outputs = outputs.empty() ? nullptr : outputs.data();
 
-        if (processor->process(data) != kResultOk) {
+        const auto blockStart = std::chrono::steady_clock::now();
+        const auto processResult = processor->process(data);
+        const double durationUs = std::chrono::duration<double, std::micro>(
+            std::chrono::steady_clock::now() - blockStart).count();
+        blockTimesUs.push_back(durationUs);
+        if (durationUs > deadlineUs) ++deadlineOverruns;
+        if (processResult != kResultOk) {
             report.add(Level::Fail, "Sustained processing (" + sizeLabel + ")", "process() failed at block " + std::to_string(i));
             return;
         }
@@ -639,7 +649,19 @@ void runSustainedProcessing(IAudioProcessor* processor,
     std::ostringstream detail;
     detail << processed << " blocks / " << (processed * numSamples) << " samples stable; "
            << elapsed << " us total; " << (processed > 0 ? elapsed / processed : 0) << " us/block";
-    report.add(Level::Pass, "Sustained processing (" + sizeLabel + ")", detail.str());
+    std::sort(blockTimesUs.begin(), blockTimesUs.end());
+    const auto percentile = [&](double p) {
+        if (blockTimesUs.empty()) return 0.0;
+        const size_t index = static_cast<size_t>((blockTimesUs.size() - 1) * p);
+        return blockTimesUs[index];
+    };
+    detail << "; process time us p95=" << percentile(0.95)
+           << ", p99=" << percentile(0.99)
+           << ", max=" << (blockTimesUs.empty() ? 0.0 : blockTimesUs.back())
+           << ", overruns=" << deadlineOverruns
+           << " (deadline " << deadlineUs << " us at 48 kHz)";
+    report.add(deadlineOverruns > 0 ? Level::Warning : Level::Pass,
+               "Sustained processing (" + sizeLabel + ")", detail.str());
 }
 
 template <typename Sample>
