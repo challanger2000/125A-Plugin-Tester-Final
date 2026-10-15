@@ -2,6 +2,22 @@
 
 **Status: WINDOWS QA PASS — tested development candidate, not merged to stable main.**
 
+## Expanded full-matrix QA, October 15, 2026
+
+The newer candidate has a **successful complete Windows Actions QA** for source commit `63b69e4070f28265e01c01125e8e2382d55cf096`.
+
+- Workflow: https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38741087175
+- Artifact ID: `11976083096` (`125A-Plugin-Tester-Windows-x64`).
+- ZIP SHA-256: `1bfff33e3397bf515f330d2128e9719e2cdc403feb086c2f50ad7abb94fae265`.
+- Exactly one public Windows x64 EXE inside the ZIP (2,194,944 bytes).
+- Full independently guarded 100-case matrix: 32/64-bit, 44.1/48/88.2/96/192 kHz and all ten 1–8192 frame blocks. Unsupported formats remain nonfailures when at least one supported profile passes.
+- Added a 32-block host-paced processing stress. It separately reports audio-callback deadline overruns and Windows host-scheduler misses; only actual callback budget overruns warn.
+- Existing fourteen positive/negative fixtures, standalone packaging, report classification, state, GUI/audio concurrency, MIDI and portable end-to-end tests all passed in this run.
+
+**Technical limit:** heap allocations and lock contention *inside third-party plug-in DLLs* are still not directly traced. Stopwatch measurements alone cannot prove allocation-free / lock-free audio execution. The full request for direct allocation/lock detection therefore remains open and must not be represented as complete.
+
+---
+
 ## Reproducible artifact identity
 
 - Exact tested source commit: `deadc71d0aad889bd1a0ad6a9f091ee7dcf3e91d`.
