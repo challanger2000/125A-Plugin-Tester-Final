@@ -1050,6 +1050,128 @@ void activateDefaultBuses(IComponent* component, Reporter& report) {
     report.add(rejected == 0 ? Level::Pass : Level::Warning, "Default bus activation", detail.str());
 }
 
+// Deterministic reference-contract profile. It is intentionally opt-in:
+// general third-party plug-ins do not promise any particular gain response.
+void runReferenceGainProfile(IComponent* component,
+                             IEditController* controller,
+                             IAudioProcessor* processor,
+                             Reporter& report) {
+    if (!component || !controller || !processor) return;
+
+    bool hasGain = false;
+    bool hasBypass = false;
+    const int32 count = controller->getParameterCount();
+    for (int32 i = 0; i < count; ++i) {
+        ParameterInfo info{};
+        if (controller->getParameterInfo(i, info) != kResultTrue) continue;
+        const auto name = toUtf8(info.title);
+        if (info.id == 0x125A0100 && name == "125A Reference Gain") hasGain = true;
+        if (info.id == 0x125A0101 && name == "125A Reference Bypass") hasBypass = true;
+    }
+    if (!hasGain || !hasBypass) return;
+
+    constexpr int32 blockSamples = 128;
+    ProcessSetup setup{};
+    setup.processMode = kRealtime;
+    setup.symbolicSampleSize = kSample32;
+    setup.maxSamplesPerBlock = blockSamples;
+    setup.sampleRate = 48000.0;
+    if (processor->canProcessSampleSize(kSample32) != kResultTrue ||
+        processor->setupProcessing(setup) != kResultTrue) {
+        report.add(Level::Fail, "Functional reference profile", "32-bit processing setup rejected");
+        return;
+    }
+    auto inputsStore = makeAudioBuses<Sample32>(component, kInput, blockSamples);
+    auto outputsStore = makeAudioBuses<Sample32>(component, kOutput, blockSamples);
+    if (!hasActiveBuffers(inputsStore) || !hasActiveBuffers(outputsStore)) {
+        report.add(Level::Fail, "Functional reference profile", "No active matched input/output");
+        return;
+    }
+    for (auto& bus : inputsStore)
+        for (auto& channel : bus.channels)
+            std::fill(channel.begin(), channel.end(), Sample32(0.25f));
+
+    if (component->setActive(true) != kResultTrue) {
+        report.add(Level::Fail, "Functional reference profile", "Component activation failed");
+        return;
+    }
+    if (processor->setProcessing(true) != kResultTrue) {
+        component->setActive(false);
+        report.add(Level::Fail, "Functional reference profile", "Processing start failed");
+        return;
+    }
+
+    struct Case {
+        double gain;
+        double bypass;
+        double expected;
+        const char* name;
+    };
+    const std::array<Case, 5> scenarios{{
+        {0.25, 0.0, 0.125, "gain -6 dB"},
+        {0.75, 0.0, 0.375, "gain +3.5 dB"},
+        {0.75, 1.0, 0.25, "bypass enabled"},
+        {0.75, 0.0, 0.375, "bypass disabled"},
+        {0.5, 0.0, 0.25, "restore nominal gain"}
+    }};
+
+    int mismatches = 0;
+    for (const auto& scenario : scenarios) {
+        ParameterChanges changes(2);
+        int32 index = 0;
+        int32 point = 0;
+        auto* gain = changes.addParameterData(0x125A0100, index);
+        const bool gainAdded = gain &&
+            gain->addPoint(0, scenario.gain, point) == kResultTrue;
+        auto* bypass = changes.addParameterData(0x125A0101, index);
+        const bool bypassAdded = bypass &&
+            bypass->addPoint(0, scenario.bypass, point) == kResultTrue;
+        if (!gainAdded || !bypassAdded) {
+            report.add(Level::Fail, "Functional reference profile", "Could not create automation queues");
+            ++mismatches;
+            break;
+        }
+
+        clearOutputBuses(outputsStore);
+        auto inputs = copyBusDescriptors(inputsStore);
+        auto outputs = copyBusDescriptors(outputsStore);
+        ProcessData data{};
+        data.processMode = kRealtime;
+        data.symbolicSampleSize = kSample32;
+        data.numSamples = blockSamples;
+        data.numInputs = static_cast<int32>(inputs.size());
+        data.numOutputs = static_cast<int32>(outputs.size());
+        data.inputs = inputs.empty() ? nullptr : inputs.data();
+        data.outputs = outputs.empty() ? nullptr : outputs.data();
+        data.inputParameterChanges = &changes;
+
+        if (processor->process(data) != kResultOk || countNonFinite(outputsStore)) {
+            report.add(Level::Fail, "Functional reference profile",
+                       std::string(scenario.name) + ": processing failed or non-finite audio");
+            ++mismatches;
+            break;
+        }
+        const double actual = outputsStore[0].channels[0][0];
+        if (std::abs(actual - scenario.expected) > 0.001) {
+            report.add(Level::Fail, "Functional reference profile",
+                       std::string(scenario.name) + " expected=" + std::to_string(scenario.expected) +
+                       ", actual=" + std::to_string(actual));
+            ++mismatches;
+        } else {
+            report.add(Level::Pass, "Functional reference profile",
+                       std::string(scenario.name) + " measured=" + std::to_string(actual));
+        }
+    }
+
+    const bool stopped = processor->setProcessing(false) == kResultTrue;
+    const bool inactive = component->setActive(false) == kResultTrue;
+    if (!stopped || !inactive)
+        report.add(Level::Fail, "Functional reference profile", "Could not stop/deactivate");
+    else if (mismatches == 0)
+        report.add(Level::Pass, "Functional reference profile summary",
+                   "Measured gain, bypass and return-to-processing contracts agree with reference");
+}
+
 void inspectAudioProcessing(IComponent* component, IEditController* controller, IAudioProcessor* processor, Reporter& report) {
     if (!component || !processor) return;
 
@@ -1330,6 +1452,7 @@ int main(int argc, char** argv) {
             } else {
                 inspectProcessingSetups(processor, report);
                 inspectAudioProcessing(component.get(), activeController, processor, report);
+                runReferenceGainProfile(component.get(), activeController, processor, report);
             }
             processor->release();
         } else {
