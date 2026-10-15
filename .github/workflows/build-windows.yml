@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings]
   workflow_dispatch:
 
 concurrency:
