@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
 project(PluginTester125A VERSION 0.2.10 LANGUAGES CXX)
+execute_process(COMMAND git rev-parse --verify HEAD
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  OUTPUT_VARIABLE QA_SOURCE_REVISION
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET)
+if(NOT QA_SOURCE_REVISION)
+  set(QA_SOURCE_REVISION "unknown")
+endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -22,7 +30,7 @@ add_executable(PluginTester125AWorker src/main.cpp
   "${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp"
   "${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/parameterchanges.cpp")
 target_link_libraries(PluginTester125AWorker PRIVATE sdk_hosting sdk_common base pluginterfaces)
-target_compile_definitions(PluginTester125AWorker PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+target_compile_definitions(PluginTester125AWorker PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX "QA_SOURCE_REVISION=\\"${QA_SOURCE_REVISION}\\"")
 if(WIN32)
   target_sources(PluginTester125AWorker PRIVATE "${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_win32.cpp")
 
