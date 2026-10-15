@@ -7,6 +7,7 @@
 #include "pluginterfaces/vst/vstspeaker.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -236,6 +237,16 @@ public:
     }
 
     tresult PLUGIN_API getState(IBStream* stream) override {
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+        if (!stream) return kInvalidArgument;
+        int32 written = 0;
+        const double gain = gainNormalized_;
+        if (stream->write(const_cast<double*>(&gain), sizeof(gain), &written) != kResultTrue ||
+            written != sizeof(gain)) return kResultFalse;
+        const uint32 bypass = bypass_ ? 1u : 0u;
+        if (stream->write(const_cast<uint32*>(&bypass), sizeof(bypass), &written) != kResultTrue ||
+            written != sizeof(bypass)) return kResultFalse;
+#endif
 #if QA_FIXTURE_KIND == 7
         if (!stream) return kInvalidArgument;
         constexpr char marker[] = "125A_STATE_PROBE";
@@ -249,10 +260,26 @@ public:
         return kResultTrue;
     }
 
-    tresult PLUGIN_API setState(IBStream*) override {
+    tresult PLUGIN_API setState(IBStream* stream) override {
 #if QA_FIXTURE_KIND == 3
+        (void)stream;
         return kResultFalse;
+#elif QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+        if (!stream) return kInvalidArgument;
+        double gain = 0.0;
+        uint32 bypass = 0;
+        int32 read = 0;
+        if (stream->read(&gain, sizeof(gain), &read) != kResultTrue || read != sizeof(gain) ||
+            !std::isfinite(gain) || gain < 0.0 || gain > 1.0)
+            return kResultFalse;
+        if (stream->read(&bypass, sizeof(bypass), &read) != kResultTrue || read != sizeof(bypass) ||
+            bypass > 1)
+            return kResultFalse;
+        gainNormalized_ = gain;
+        bypass_ = bypass != 0;
+        return kResultTrue;
 #else
+        (void)stream;
         return kResultTrue;
 #endif
     }
