@@ -12,6 +12,7 @@
 #include "pluginterfaces/vst/vsttypes.h"
 
 #include "report_paths.h"
+#include "callback_import_probe.h"
 
 #include <algorithm>
 #include <array>
@@ -25,6 +26,7 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <memory>
 
 #ifndef QA_SOURCE_REVISION
 #define QA_SOURCE_REVISION "unknown"
@@ -36,6 +38,7 @@ using namespace Steinberg::Vst;
 using namespace VST3::Hosting;
 
 namespace {
+size_t gImportedApiCoverage = 0;
 
 // Minimal host-side edit callback. The tester never injects automation from
 // this callback; it acknowledges well-formed controller notifications.
@@ -648,6 +651,7 @@ void runSustainedProcessing(IAudioProcessor* processor,
     }
     // Paced host-like callback scheduling; all sleep/wait work is outside process().
     constexpr int pacedBlocks = 32;
+    uint64_t tracedHeap = 0, tracedLocks = 0;
     const auto period = std::chrono::duration<double>(static_cast<double>(numSamples) / 48000.0);
     auto due = std::chrono::steady_clock::now();
     int pacedCallbackOverruns = 0;
@@ -665,7 +669,12 @@ void runSustainedProcessing(IAudioProcessor* processor,
         data.inputs = inputs.empty() ? nullptr : inputs.data();
         data.outputs = outputs.empty() ? nullptr : outputs.data();
         const auto startBlock = std::chrono::steady_clock::now();
-        if (processor->process(data) != kResultOk || countNonFinite(outputStorage) != 0) {
+        CallbackImportProbe::Scope importedScope(gImportedApiCoverage > 0);
+        const auto processResult = processor->process(data);
+        const auto imported = importedScope.finish(gImportedApiCoverage);
+        tracedHeap += imported.allocations;
+        tracedLocks += imported.blockingApis;
+        if (processResult != kResultOk || countNonFinite(outputStorage) != 0) {
             report.add(Level::Fail, "Paced realtime (" + sizeLabel + ")",
                        "process failed or output non-finite");
             return;
@@ -680,6 +689,16 @@ void runSustainedProcessing(IAudioProcessor* processor,
             std::this_thread::sleep_until(due);
         else ++pacedSchedulerMisses;
     }
+    if (gImportedApiCoverage == 0)
+        report.add(Level::Info, "Callback API tracing (" + sizeLabel + ")",
+                   "NOT INSTRUMENTED: target module imports no tracked Win32 APIs");
+    else
+        report.add(tracedHeap > 0 ? Level::Fail : tracedLocks > 0 ? Level::Warning : Level::Pass,
+                   "Callback API tracing (" + sizeLabel + ")",
+                   std::to_string(gImportedApiCoverage) + " monitored import slots, " +
+                   std::to_string(tracedHeap) + " heap API calls, " +
+                   std::to_string(tracedLocks) + " potentially blocking API calls; " +
+                   "not a complete custom allocator/lock detector");
     report.add(pacedCallbackOverruns ? Level::Warning : Level::Pass,
                "Paced realtime (" + sizeLabel + ")",
                std::to_string(pacedBlocks) + " host-paced blocks, max=" +
@@ -1563,6 +1582,8 @@ int main(int argc, char** argv) {
         return 1;
     }
     report.add(Level::Pass, "Module load", "VST3 module loaded successfully");
+    CallbackImportProbe::ImportedApis importHooks(pluginPath.filename().wstring());
+    gImportedApiCoverage = importHooks.covered();
 
     HostApplication hostApplication;
     FUnknown* hostContext = &hostApplication;
