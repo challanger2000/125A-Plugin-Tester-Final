@@ -1,4 +1,18 @@
-# 125A Plugin Tester v0.2.10 — Expanded Windows x64 QA
+# 125A Plugin Tester v0.2.10 — FINAL Release QA
+
+**Officially published GitHub FINAL:** https://github.com/challanger2000/125A-Plugin-Tester-Final/releases/tag/v0.2.10
+
+- Source and tag: `ec2db65b9b9dbce2b7a5d146cb54869c9ad82e6d`.
+- Full Windows QA PASS: https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38744097119
+- Portable Windows EXE SHA-256: `b0f386422d107ac6fa8b15c3e1e86113f52b013e277fc94b16d28b929438bfea`.
+- GitHub FINAL ZIP SHA-256: `e5b152fa5b05140f5dfc883c7dd736f572ca50c13b78d90be7505ec6e13e83af`.
+- 16 VST3 fixture kinds (0–15) passed expected positive/negative classification, including imported heap and potentially blocking wait callback detections.
+- Imported-Win32-API measurement is **scoped**: custom allocators, statically linked/indirect calls and other lock mechanisms are not universally detectable. A missing signal is not proof of a fully allocation/lock-free plugin.
+- `main` retains former stable v0.2.9.
+
+---
+
+# Historical v0.2.10 expanded candidate verification
 
 **Status: WINDOWS QA PASS — tested development candidate, not merged to stable main.**
 
