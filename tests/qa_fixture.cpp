@@ -6,6 +6,7 @@
 #include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/vstspeaker.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/vst/ivstevents.h"
 
 #include <algorithm>
 #include <atomic>
@@ -70,6 +71,14 @@ constexpr const char* kPluginName = "125A QA Bad Ignored Gain";
 const FUID kProcessorUID(0x125A1011, 0x20261015, 0x00000000, 0x00000012);
 const FUID kControllerUID(0x125A2011, 0x20261015, 0x00000000, 0x00000022);
 constexpr const char* kPluginName = "125A QA Bad Concurrent GUI Audio";
+#elif QA_FIXTURE_KIND == 12
+const FUID kProcessorUID(0x125A1012, 0x20261015, 0x00000000, 0x00000013);
+const FUID kControllerUID(0x125A2012, 0x20261015, 0x00000000, 0x00000023);
+constexpr const char* kPluginName = "125A QA Good Event Echo";
+#elif QA_FIXTURE_KIND == 13
+const FUID kProcessorUID(0x125A1013, 0x20261015, 0x00000000, 0x00000014);
+const FUID kControllerUID(0x125A2013, 0x20261015, 0x00000000, 0x00000024);
+constexpr const char* kPluginName = "125A QA Bad Missing Event";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -248,6 +257,10 @@ public:
 
         addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
         addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
+#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13
+        addEventInput(STR16("125A QA Event Echo"), 16);
+        addEventOutput(STR16("125A QA Event Echo Out"), 16);
+#endif
         return kResultOk;
     }
 
@@ -342,6 +355,20 @@ public:
 #endif
 
     tresult PLUGIN_API process(ProcessData& data) override {
+#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13
+        if (data.inputEvents && data.outputEvents) {
+            const int32 total = data.inputEvents->getEventCount();
+            for (int32 i = 0; i < total; ++i) {
+#if QA_FIXTURE_KIND == 13
+                if (i == total - 1) continue; // Deliberate lost event
+#endif
+                Event event{};
+                if (data.inputEvents->getEvent(i, event) != kResultTrue ||
+                    data.outputEvents->addEvent(event) != kResultTrue)
+                    return kResultFalse;
+            }
+        }
+#endif
 #if QA_FIXTURE_KIND == 11
         if (gEditorAttached.load() && data.numSamples > 0)
             return kResultFalse; // Invalid only during concurrent editor/audio usage
