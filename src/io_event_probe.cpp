@@ -544,26 +544,99 @@ bool runEventStressTyped(IComponent* component,
     data.inputEvents = &inputEvents;
     data.outputEvents = hasEventOutput ? &outputEvents : nullptr;
 
-    const bool processOk = processor->process(data) == kResultOk;
-    const bool finite = outputsFinite(outputs);
-
-    bool outputEventsValid = true;
-    if (hasEventOutput) {
-        for (int32 i = 0; i < outputEvents.getEventCount(); ++i) {
-            Event event{};
-            if (outputEvents.getEvent(i, event) != kResultTrue || event.sampleOffset < 0 || event.sampleOffset >= numSamples) {
-                outputEventsValid = false;
+    // Only the deterministic 125A event-echo fixtures promise to return
+    // every input event. Normal VST3 plugins may transform or consume events.
+    BusInfo eventBusInfo{};
+    bool echoContract = component->getBusInfo(kEvent, kInput, eventInput.index,
+                                               eventBusInfo) == kResultTrue;
+    const std::string echoName = "125A QA Event Echo";
+    if (echoContract) {
+        for (size_t i = 0; i < echoName.size(); ++i) {
+            if (eventBusInfo.name[i] != static_cast<char16>(echoName[i])) {
+                echoContract = false;
                 break;
             }
         }
+        if (echoContract && eventBusInfo.name[echoName.size()] != 0)
+            echoContract = false;
     }
 
+    ProcessContext transport{};
+    transport.sampleRate = 48000.0;
+    transport.state = ProcessContext::kPlaying |
+                      ProcessContext::kTempoValid |
+                      ProcessContext::kTimeSigValid |
+                      ProcessContext::kProjectTimeMusicValid;
+    transport.timeSigNumerator = 4;
+    transport.timeSigDenominator = 4;
+    data.processContext = &transport;
+    bool processOk = true;
+    bool finite = true;
+    bool outputEventsValid = true;
+    bool echoComplete = true;
+    int totalEmitted = 0;
+    constexpr int kTransportBlocks = 6;
+
+    for (int block = 0; block < kTransportBlocks; ++block) {
+        transport.tempo = block >= 3 ? 137.0 : 120.0;
+        transport.timeSigNumerator = block >= 4 ? 3 : 4;
+        transport.projectTimeSamples = block == 5 ? 0 : static_cast<int64>(block) * numSamples;
+        transport.projectTimeMusic = block == 5 ? 0.0 :
+            static_cast<double>(transport.projectTimeSamples) *
+            transport.tempo / (60.0 * transport.sampleRate);
+        if (block == 1)
+            transport.state &= ~ProcessContext::kPlaying;
+        else
+            transport.state |= ProcessContext::kPlaying;
+
+        data.inputEvents = block == 0 ? &inputEvents : nullptr;
+        if (hasEventOutput) outputEvents.clear();
+        if (processor->process(data) != kResultOk) {
+            processOk = false;
+            break;
+        }
+        if (!outputsFinite(outputs)) {
+            finite = false;
+            break;
+        }
+        if (hasEventOutput) {
+            const int32 emitted = outputEvents.getEventCount();
+            totalEmitted += emitted;
+            if (echoContract && block == 0 &&
+                emitted != inputEvents.getEventCount())
+                echoComplete = false;
+            if (echoContract && block > 0 && emitted != 0)
+                echoComplete = false;
+            for (int32 i = 0; i < emitted; ++i) {
+                Event output{};
+                if (outputEvents.getEvent(i, output) != kResultTrue ||
+                    output.sampleOffset < 0 || output.sampleOffset >= numSamples) {
+                    outputEventsValid = false;
+                    break;
+                }
+                if (echoContract && block == 0) {
+                    Event expected{};
+                    if (inputEvents.getEvent(i, expected) != kResultTrue ||
+                        output.type != expected.type ||
+                        output.sampleOffset != expected.sampleOffset ||
+                        output.busIndex != expected.busIndex)
+                        echoComplete = false;
+                }
+            }
+        } else if (echoContract) {
+            echoComplete = false;
+        }
+        if (!outputEventsValid) break;
+    }
+    if (!echoComplete) {
+        std::cerr << "[FAIL] Event completeness - controlled VST3 echo did not preserve every input event\n";
+    }
     const bool stopOk = processor->setProcessing(false) == kResultTrue;
     const bool deactivateOk = component->setActive(false) == kResultTrue;
     component->activateBus(kEvent, kInput, eventInput.index, false);
     const bool restored = restoreDefaultActivation(component, buses);
 
-    if (!processOk || !finite || !outputEventsValid || !stopOk || !deactivateOk || !restored) {
+    if (!processOk || !finite || !outputEventsValid || !echoComplete || !stopOk || !deactivateOk || !restored) {
         std::cerr << "[FAIL] Event stress - dense event processing/lifecycle or output-event validation failed\n";
         return false;
     }
@@ -571,7 +644,7 @@ bool runEventStressTyped(IComponent* component,
     std::cout << "[PASS] Event stress - " << (eventPairs * 2)
               << " sample-accurate NoteOn/NoteOff events accepted across " << channels
               << " channel(s), including block boundaries 0/511; output events="
-              << (hasEventOutput ? outputEvents.getEventCount() : 0) << "\n";
+              << totalEmitted << " across " << kTransportBlocks << " transport blocks\n";
     return true;
 }
 
