@@ -72,7 +72,8 @@ public:
         }
         out << "\nRESULT: " << summary() << '\n';
         out << "RELEASE: " << (failCount() == 0 ? (warningCount() == 0 ? "PASS" : "REVIEW WARNINGS") : "NOT RECOMMENDED") << '\n';
-        return true;
+        out.flush();
+        return out.good();
     }
 
 private:
