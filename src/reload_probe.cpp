@@ -57,6 +57,11 @@ bool runCycle(const fs::path& pluginPath, int cycle) {
         bool controllerInitialized = false;
         if (hasControllerCID) {
             separateController = factory.createInstance<IEditController>(VST3::UID(controllerCID));
+            if (!separateController) {
+                component->terminate();
+                std::cerr << "[FAIL] Reload cycle " << cycle << " - controller creation failed\n";
+                return false;
+            }
             if (separateController) {
                 if (separateController->initialize(hostContext) != kResultOk) {
                     component->terminate();
