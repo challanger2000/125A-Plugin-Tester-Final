@@ -55,6 +55,14 @@ constexpr const char* kPluginName = "125A QA Bad Ignored State";
 const FUID kProcessorUID(0x125A1008, 0x20261015, 0x00000000, 0x00000009);
 const FUID kControllerUID(0x125A2008, 0x20261015, 0x00000000, 0x00000019);
 constexpr const char* kPluginName = "125A QA Bad 64 Bit";
+#elif QA_FIXTURE_KIND == 9
+const FUID kProcessorUID(0x125A1009, 0x20261015, 0x00000000, 0x00000010);
+const FUID kControllerUID(0x125A2009, 0x20261015, 0x00000000, 0x00000020);
+constexpr const char* kPluginName = "125A QA Functional Gain";
+#elif QA_FIXTURE_KIND == 10
+const FUID kProcessorUID(0x125A1010, 0x20261015, 0x00000000, 0x00000011);
+const FUID kControllerUID(0x125A2010, 0x20261015, 0x00000000, 0x00000021);
+constexpr const char* kPluginName = "125A QA Bad Ignored Gain";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -147,6 +155,9 @@ private:
 
 #endif
 
+constexpr ParamID kQaReferenceGain = 0x125A0100;
+constexpr ParamID kQaReferenceBypass = 0x125A0101;
+
 class QAFixtureController final : public EditController {
 public:
     static FUnknown* createInstance(void*) {
@@ -154,7 +165,17 @@ public:
     }
 
     tresult PLUGIN_API initialize(FUnknown* context) override {
-        return EditController::initialize(context);
+        const auto result = EditController::initialize(context);
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+        if (result == kResultOk) {
+            parameters.addParameter(STR16("125A Reference Gain"), STR16("x"), 0, 0.5,
+                                    ParameterInfo::kCanAutomate, kQaReferenceGain);
+            parameters.addParameter(STR16("125A Reference Bypass"), nullptr, 1, 0.0,
+                                    ParameterInfo::kCanAutomate | ParameterInfo::kIsBypass,
+                                    kQaReferenceBypass);
+        }
+#endif
+        return result;
     }
 
     tresult PLUGIN_API setComponentState(IBStream*) override {
@@ -206,7 +227,7 @@ public:
     // Positive control explicitly advertises both audio precisions. Without
     // this, the production QA only exercises its 32-bit branch.
     tresult PLUGIN_API canProcessSampleSize(int32 symbolicSampleSize) override {
-#if QA_FIXTURE_KIND == 0 || QA_FIXTURE_KIND == 8
+#if QA_FIXTURE_KIND == 0 || QA_FIXTURE_KIND == 8 || QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
         return (symbolicSampleSize == kSample32 || symbolicSampleSize == kSample64)
                    ? kResultTrue : kResultFalse;
 #else
@@ -262,24 +283,61 @@ public:
     static uint32 stateInstanceCounter_;
     uint32 stateToken_ = 0;
 #endif
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+    double gainNormalized_ = 0.5;
+    bool bypass_ = false;
+#endif
 
     tresult PLUGIN_API process(ProcessData& data) override {
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+        if (data.inputParameterChanges) {
+            const int32 queues = data.inputParameterChanges->getParameterCount();
+            for (int32 i = 0; i < queues; ++i) {
+                IParamValueQueue* queue = data.inputParameterChanges->getParameterData(i);
+                if (!queue || queue->getPointCount() <= 0) continue;
+                int32 offset = 0;
+                ParamValue value = 0.0;
+                if (queue->getPoint(queue->getPointCount() - 1, offset, value) != kResultTrue)
+                    continue;
+                if (queue->getParameterId() == kQaReferenceBypass)
+                    bypass_ = value >= 0.5;
+#if QA_FIXTURE_KIND == 9
+                if (queue->getParameterId() == kQaReferenceGain)
+                    gainNormalized_ = std::min(1.0, std::max(0.0, value));
+#endif
+            }
+        }
+#endif
         if (data.numOutputs <= 0 || data.outputs == nullptr)
             return kResultOk;
 
         for (int32 busIndex = 0; busIndex < data.numOutputs; ++busIndex) {
             auto& bus = data.outputs[busIndex];
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+            bus.silenceFlags = 0;
+#else
             bus.silenceFlags = bus.numChannels >= 64
                                    ? ~uint64(0)
                                    : (bus.numChannels > 0 ? ((uint64(1) << bus.numChannels) - 1) : 0);
+#endif
 
             for (int32 channel = 0; channel < bus.numChannels; ++channel) {
                 if (data.symbolicSampleSize == kSample32) {
                     Sample32* out = bus.channelBuffers32 ? bus.channelBuffers32[channel] : nullptr;
                     if (!out)
                         continue;
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+                    const Sample32* in = (data.inputs && busIndex < data.numInputs &&
+                        data.inputs[busIndex].channelBuffers32 &&
+                        channel < data.inputs[busIndex].numChannels)
+                        ? data.inputs[busIndex].channelBuffers32[channel] : nullptr;
+                    const Sample32 gain = static_cast<Sample32>(bypass_ ? 1.0 : 2.0 * gainNormalized_);
+                    for (int32 n = 0; n < data.numSamples; ++n)
+                        out[n] = (in ? in[n] : Sample32(0)) * gain;
+#else
                     if (data.numSamples > 0)
                         std::fill_n(out, data.numSamples, Sample32(0));
+#endif
 #if QA_FIXTURE_KIND == 2
                     if (data.numSamples > 0) {
                         out[0] = std::numeric_limits<Sample32>::quiet_NaN();
@@ -290,8 +348,18 @@ public:
                     Sample64* out = bus.channelBuffers64 ? bus.channelBuffers64[channel] : nullptr;
                     if (!out)
                         continue;
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+                    const Sample64* in = (data.inputs && busIndex < data.numInputs &&
+                        data.inputs[busIndex].channelBuffers64 &&
+                        channel < data.inputs[busIndex].numChannels)
+                        ? data.inputs[busIndex].channelBuffers64[channel] : nullptr;
+                    const Sample64 gain = static_cast<Sample64>(bypass_ ? 1.0 : 2.0 * gainNormalized_);
+                    for (int32 n = 0; n < data.numSamples; ++n)
+                        out[n] = (in ? in[n] : Sample64(0)) * gain;
+#else
                     if (data.numSamples > 0)
                         std::fill_n(out, data.numSamples, Sample64(0));
+#endif
 #if QA_FIXTURE_KIND == 2 || QA_FIXTURE_KIND == 8
                     if (data.numSamples > 0) {
                         out[0] = std::numeric_limits<Sample64>::quiet_NaN();
