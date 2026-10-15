@@ -300,7 +300,10 @@ ScanStatus classifyResult(const fs::path& pluginPath, int exitCode) {
 
     if (readTextFile(ReportPaths::qa(pluginPath), text)) {
         const ResultCounts counts = parseCounts(text);
-        if (counts.fail >= 0) {
+        // A truncated/stale report without its final release verdict is not
+        // sufficient evidence of a completed test run.
+        const bool finalized = text.find("RELEASE: ") != std::string::npos;
+        if (counts.fail >= 0 && finalized) {
             if (counts.fail > 0)
                 return ScanStatus::Fail;
             if (counts.warning > 0)
