@@ -225,6 +225,41 @@ void inspectParameters(IEditController* controller, Reporter& report) {
         }
     }
 
+    // Exercise the user-facing normalized/value/string conversion APIs.
+    // The current value is used so read-only and stepped parameters remain valid.
+    int stringChecked = 0;
+    int stringRejected = 0;
+    for (int32 i = 0; i < count; ++i) {
+        ParameterInfo info{};
+        if (controller->getParameterInfo(i, info) != kResultTrue)
+            continue;
+        const ParamValue initial = controller->getParamNormalized(info.id);
+        if (!isNormalized(initial))
+            continue;
+        String128 display{};
+        if (controller->getParamStringByValue(info.id, initial, display) != kResultTrue) {
+            ++stringRejected;
+            continue;
+        }
+        ParamValue parsed = 0.0;
+        if (controller->getParamValueByString(info.id, display, parsed) != kResultTrue ||
+            !isNormalized(parsed)) {
+            ++stringRejected;
+            continue;
+        }
+        ++stringChecked;
+        if (std::abs(parsed - initial) > 0.025) {
+            report.add(Level::Warning, "Parameter string roundtrip",
+                       "ID " + std::to_string(info.id) + " changed from " +
+                       std::to_string(initial) + " to " + std::to_string(parsed) +
+                       " (formatting can be lossy)");
+        }
+    }
+    report.add(stringRejected == 0 ? Level::Pass : Level::Warning,
+               "Parameter string conversion",
+               std::to_string(stringChecked) + " converted, " +
+               std::to_string(stringRejected) + " refused conversion");
+
     if (conversionFailures == 0)
         report.add(Level::Pass, "Parameter conversion stress", std::to_string(conversionsChecked) + " normalized/plain conversions returned finite in-range values");
     else
