@@ -51,6 +51,10 @@ constexpr const char* kPluginName = "125A QA Bad Editor";
 const FUID kProcessorUID(0x125A1007, 0x20261015, 0x00000000, 0x00000008);
 const FUID kControllerUID(0x125A2007, 0x20261015, 0x00000000, 0x00000018);
 constexpr const char* kPluginName = "125A QA Bad Ignored State";
+#elif QA_FIXTURE_KIND == 8
+const FUID kProcessorUID(0x125A1008, 0x20261015, 0x00000000, 0x00000009);
+const FUID kControllerUID(0x125A2008, 0x20261015, 0x00000000, 0x00000019);
+constexpr const char* kPluginName = "125A QA Bad 64 Bit";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -202,7 +206,7 @@ public:
     // Positive control explicitly advertises both audio precisions. Without
     // this, the production QA only exercises its 32-bit branch.
     tresult PLUGIN_API canProcessSampleSize(int32 symbolicSampleSize) override {
-#if QA_FIXTURE_KIND == 0
+#if QA_FIXTURE_KIND == 0 || QA_FIXTURE_KIND == 8
         return (symbolicSampleSize == kSample32 || symbolicSampleSize == kSample64)
                    ? kResultTrue : kResultFalse;
 #else
@@ -288,7 +292,7 @@ public:
                         continue;
                     if (data.numSamples > 0)
                         std::fill_n(out, data.numSamples, Sample64(0));
-#if QA_FIXTURE_KIND == 2
+#if QA_FIXTURE_KIND == 2 || QA_FIXTURE_KIND == 8
                     if (data.numSamples > 0) {
                         out[0] = std::numeric_limits<Sample64>::quiet_NaN();
                         bus.silenceFlags = 0;
