@@ -564,11 +564,11 @@ std::wstring trimLine(std::wstring line) {
     return line;
 }
 
-void addPlainLanguageSummary(const std::wstring& report);
+void addPlainLanguageSummary(const std::wstring& report, const std::wstring& status);
 
-void populatePluginResults(const std::wstring& report) {
+void populatePluginResults(const std::wstring& report, const std::wstring& status) {
     clearResults(L"Prüfung", L"Befund");
-    addPlainLanguageSummary(report);
+    addPlainLanguageSummary(report, status);
     std::wistringstream input(report);
     std::wstring line;
     int rows = 0;
@@ -695,9 +695,13 @@ PlainFinding explainFinding(const std::wstring& finding) {
     return result;
 }
 
-void addPlainLanguageSummary(const std::wstring& report) {
-    if (report.empty() || report.find(L"TEST INCONCLUSIVE") != std::wstring::npos) {
+void addPlainLanguageSummary(const std::wstring& report, const std::wstring& status) {
+    if (status == L"INCONCLUSIVE" || report.empty()) {
         addResultRow(L"Kurz erklärt", L"INCONCLUSIVE – Kein vollständiger erfolgreicher Prüfbericht vorhanden.");
+        return;
+    }
+    if (status == L"FAIL" && report.find(L"[FAIL] ") == std::wstring::npos) {
+        addResultRow(L"Kurz erklärt", L"FAIL – Prüfprozess oder Ergebnisquelle meldet einen Fehler.");
         return;
     }
     const std::wstring fail = firstFinding(report, L"[FAIL] ");
@@ -719,6 +723,10 @@ void addPlainLanguageSummary(const std::wstring& report) {
         return;
     }
 
+    if (status != L"PASS") {
+        addResultRow(L"Kurz erklärt", L"WARNING – Prüfstatus und Detailbericht müssen überprüft werden.");
+        return;
+    }
     addResultRow(L"Kurz erklärt", L"PASS – In den ausgeführten Prüfungen wurde kein technischer Fehler gefunden.");
     addResultRow(L"Bedeutung", L"Der Tester hat die geprüften Bereiche ohne FAIL abgeschlossen. Das ist keine Garantie für Fehlerfreiheit in jeder DAW oder jeder Konfiguration.");
 }
@@ -906,7 +914,7 @@ void finishTest(HWND window, std::pair<fs::path, int>* result) {
             SendMessageW(gProgress, PBM_SETPOS, found, 0);
         }
     } else {
-        populatePluginResults(report);
+        populatePluginResults(report, status);
         SetWindowTextW(gProgressText, L"Einzelprüfung abgeschlossen. Vollständige TXT/JSON-Berichte liegen im Report-Ordner.");
     }
 
