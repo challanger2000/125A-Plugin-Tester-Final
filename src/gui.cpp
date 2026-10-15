@@ -501,10 +501,10 @@ std::wstring resultTextFor(const fs::path& input, int exitCode) {
         return L"Der Ordnerscan wurde beendet, aber der Zusammenfassungsbericht konnte nicht gelesen werden.";
     }
 
-    std::wstring text = readTextFile(ReportPaths::qa(input));
+    std::wstring text = readTextFile(ReportPaths::guard(input));
     if (!text.empty())
         return text;
-    text = readTextFile(ReportPaths::guard(input));
+    text = readTextFile(ReportPaths::qa(input));
     if (!text.empty())
         return text;
 
@@ -530,6 +530,8 @@ int summaryCount(const std::wstring& report, const std::wstring& label) {
 
 std::wstring statusFor(const fs::path& input, int exitCode, const std::wstring& report) {
     if (isVst3Path(input)) {
+        if (exitCode == 1) return L"FAIL";
+        if (exitCode != 0 || report.empty()) return L"INCONCLUSIVE";
         if (report.find(L"TEST INCONCLUSIVE") != std::wstring::npos)
             return L"INCONCLUSIVE";
         if (report.find(L"[FAIL]") != std::wstring::npos)
@@ -548,7 +550,10 @@ std::wstring statusFor(const fs::path& input, int exitCode, const std::wstring& 
         return L"INCONCLUSIVE";
     if (warning > 0)
         return L"WARNING";
-    if (inconclusive == 0 && fail == 0 && warning == 0)
+    const int discoveryErrors = summaryCount(report, L"DISCOVERY_ERRORS:");
+    if (exitCode != 0 || discoveryErrors > 0)
+        return L"INCONCLUSIVE";
+    if (inconclusive == 0 && fail == 0 && warning == 0 && discoveryErrors == 0)
         return L"PASS";
     return exitCode == 0 ? L"PASS" : L"INCONCLUSIVE";
 }
