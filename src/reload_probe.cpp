@@ -107,8 +107,8 @@ int main(int argc, char** argv) {
     // Preserve the exact first failing reload operation even if the launcher
     // aborts before the main QA worker or Steinberg Validator can run.
     std::error_code reportEc;
+    std::ofstream failureLog;
     if (ReportPaths::ensureRoot(reportEc)) {
-        static std::ofstream failureLog;
         failureLog.open(ReportPaths::qa(pluginPath), std::ios::binary | std::ios::trunc);
         if (failureLog) {
             failureLog << "125A Reload/Instantiation Diagnostic\n"
@@ -123,8 +123,10 @@ int main(int argc, char** argv) {
     }
 
     for (int cycle = 1; cycle <= kReloadCycles; ++cycle) {
-        if (!runCycle(pluginPath, cycle))
+        if (!runCycle(pluginPath, cycle)) {
+            std::cerr.flush();
             return 1;
+        }
     }
 
     std::cout << "[PASS] Reload/instantiation stress - " << kReloadCycles
