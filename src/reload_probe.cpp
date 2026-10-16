@@ -1,3 +1,4 @@
+#include "report_paths.h"
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
@@ -6,6 +7,7 @@
 #include "pluginterfaces/vst/vsttypes.h"
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -102,6 +104,19 @@ int main(int argc, char** argv) {
     }
 
     const fs::path pluginPath = fs::u8path(argv[1]);
+    // Preserve the exact first failing reload operation even if the launcher
+    // aborts before the main QA worker or Steinberg Validator can run.
+    std::error_code reportEc;
+    if (ReportPaths::ensureRoot(reportEc)) {
+        static std::ofstream failureLog;
+        failureLog.open(ReportPaths::qa(pluginPath), std::ios::binary | std::ios::trunc);
+        if (failureLog) {
+            failureLog << "125A Reload/Instantiation Diagnostic\n"
+                       << "Plugin: " << pluginPath.u8string() << "\n"
+                       << "Early failure: main QA and Validator have not run.\n";
+            std::cerr.rdbuf(failureLog.rdbuf());
+        }
+    }
     if (!fs::exists(pluginPath)) {
         std::cerr << "[FAIL] Reload probe - path does not exist\n";
         return 2;
