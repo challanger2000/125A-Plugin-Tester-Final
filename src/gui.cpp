@@ -919,7 +919,7 @@ void finishTest(HWND window, std::pair<fs::path, int>* result) {
         }
     } else {
         populatePluginResults(report, status);
-        SetWindowTextW(gProgressText, L"Einzelprüfung abgeschlossen. Vollständige TXT/JSON-Berichte liegen im Report-Ordner.");
+        SetWindowTextW(gProgressText, L"Prüfung beendet. Vorhandene Diagnoseberichte finden Sie im Report-Ordner.");
     }
 
     if (exitCode == 127) {
