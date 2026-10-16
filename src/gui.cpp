@@ -938,7 +938,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             }
             createFonts();
 
-            gTitle = makeControl(L"STATIC", L"125A Plugin Tester / Quality Checker",
+            gTitle = makeControl(L"STATIC", L"125A Plugin Tester v0.2.10 / Quality Checker",
                                  WS_CHILD | WS_VISIBLE, window, 0);
             applyFont(gTitle, gTitleFont);
             gSubtitle = makeControl(L"STATIC", L"VST3 validation · stress testing · release QA",
