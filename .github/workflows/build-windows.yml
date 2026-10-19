@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # The source provenance gate must see the approved release ancestor.
 
       - name: Enforce verified v0.2.10 source baseline
         shell: pwsh
