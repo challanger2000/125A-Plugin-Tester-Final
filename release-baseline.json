@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "verified": false,
+  "approved_version": null,
+  "approved_source_commit": null,
+  "approved_package_sha256": null,
+  "reason": "Owner has v0.2.10 ZIP; exact source commit and package SHA-256 not yet verified. The repository declares v0.2.9; do not assume this is v0.2.10."
+}
