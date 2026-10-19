@@ -30,11 +30,11 @@ def main():
         fail("latest approved binary/source provenance is NOT VERIFIED; no release build permitted")
     version = m.get("approved_version")
     sha = m.get("approved_source_commit")
-    if not isinstance(version, str) or not re.fullmatch(r"0\\.2\\.\\d+", version):
+    if not isinstance(version, str) or not re.fullmatch(r"0\.2\.\d+", version):
         fail("approved_version missing/invalid")
     if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         fail("approved_source_commit missing/invalid")
-    actual = re.search(r"project\\(PluginTester125A VERSION ([0-9.]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"))
+    actual = re.search(r"project\(PluginTester125A VERSION ([0-9.]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"))
     if not actual or actual.group(1) != version:
         fail("CMake version differs from verified approved version " + version)
     result = subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], cwd=ROOT)
