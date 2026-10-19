@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "approved_version": "0.2.10",
+  "approved_source_commit": "ec2db65b9b9dbce2b7a5d146cb54869c9ad82e6d",
+  "official_release_zip_sha256": "e5b152fa5b05140f5dfc883c7dd736f572ca50c13b78d90be7505ec6e13e83af",
+  "official_release_exe_sha256": "b0f386422d107ac6fa8b15c3e1e86113f52b013e277fc94b16d28b929438bfea",
+  "release_url": "https://github.com/challanger2000/125A-Plugin-Tester-Final/releases/tag/v0.2.10",
+  "note": "Checks source ancestry, not equivalence of third-party/repacked ZIPs. Uploaded 125A-Plugin-Tester-v0.2.10-Windows-x64.zip has a different SHA-256 and EXE size; provenance unverified."
+}
