@@ -13,6 +13,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Enforce verified release baseline
+        shell: pwsh
+        run: python scripts/verify_release_baseline.py
+
       - name: Configure
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DSMTG_CREATE_PLUGIN_LINK=0
 
