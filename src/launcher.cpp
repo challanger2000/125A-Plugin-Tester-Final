@@ -762,13 +762,13 @@ int wmain(int argc, wchar_t** argv) {
 
     bool stateAnnotated = false;
     if (stateResult == 0)
-        stateAnnotated = annotateReport(pluginPath, "PASS", "Fresh-instance state verification", "Component state survived transfer to a separately initialized instance and re-save", 1, 0, 0);
+        stateAnnotated = annotateReport(pluginPath, "PASS", "Fresh-instance state verification", "New component accepted saved state and re-serialized it; semantic equivalence requires an independent functional oracle", 1, 0, 0);
     else if (stateResult == 10)
         stateAnnotated = annotateReport(pluginPath, "INFO", "Fresh-instance state verification", "Not applicable because no component state was available", 0, 0, 0);
     else if (stateResult == 11)
         stateAnnotated = annotateReport(pluginPath, "WARN", "Fresh-instance state verification", "Component persistence probe completed with persistence/controller/lifecycle warning(s)", 0, 1, 0);
     else if (stateResult == 1)
-        stateAnnotated = annotateReport(pluginPath, "FAIL", "Fresh-instance state verification", "Fresh-instance state transfer or verification failed", 0, 0, 1);
+        stateAnnotated = annotateReport(pluginPath, "FAIL", "Fresh-instance state verification", "Fresh-instance state API, controlled semantic state oracle, or simultaneous-controller-instance isolation failed", 0, 0, 1);
     if (!stateAnnotated)
         std::wcerr << L"[WARN] Report annotation - Fresh-instance state result could not be integrated\n";
 
