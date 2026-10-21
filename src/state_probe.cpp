@@ -1,3 +1,4 @@
+#include "report_paths.h"
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/common/memorystream.h"
@@ -9,6 +10,7 @@
 #include "pluginterfaces/vst/vsttypes.h"
 
 #include <cstring>
+#include <fstream>
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -300,6 +302,9 @@ struct IsolationObservation {
     bool exercised = false;
     bool warning = false;
     bool knownDefect = false;
+    ParamID observedParameter = 0;
+    ParamValue expectedUntouched = 0.0;
+    ParamValue actualUntouched = 0.0;
 };
 
 // This test is deliberately restricted to a single host/control thread. It
@@ -372,6 +377,9 @@ IsolationObservation probeConcurrentControllerInstances(PluginFactory& factory,
             if (stimulusApplied) {
                 observed.exercised = true;
                 examinedId = first.id;
+                observed.observedParameter = first.id;
+                observed.expectedUntouched = beforeB;
+                observed.actualUntouched = actualB;
                 if (!std::isfinite(actualB) || std::fabs(actualB - beforeB) > 1.0e-7) {
                     if (negativeFixture) {
                         observed.knownDefect = true;
@@ -464,6 +472,17 @@ int main(int argc, char** argv) {
     factory.setHostContext(hostContext);
     const auto classes = factory.classInfos();
 
+    std::error_code evidenceError;
+    std::ofstream instanceEvidence;
+    if (ReportPaths::ensureRoot(evidenceError)) {
+        const fs::path evidencePath = ReportPaths::root() /
+            (ReportPaths::baseName(pluginPath) + L"_125A_MultiInstance_Probe.txt");
+        instanceEvidence.open(evidencePath, std::ios::binary | std::ios::trunc);
+        if (instanceEvidence)
+            instanceEvidence << "125A Plugin Tester - concurrent controller-instance oracle\n"
+                             << "Evidence scope: control-thread normalized parameter observations only.\n"
+                             << "Multiple instances are NOT multiple views of one instance.\n\n";
+    }
     int audioClasses = 0;
     int statefulClasses = 0;
     bool warning = false;
@@ -481,6 +500,22 @@ int main(int argc, char** argv) {
             ++statefulClasses;
         warning = warning || classResult.warning;
         const auto isolation = probeConcurrentControllerInstances(factory, classInfo, hostContext);
+        if (instanceEvidence) {
+            instanceEvidence << "Class: " << classInfo.name().data() << "\n"
+                             << "Test: independent controllers of two simultaneous instances\n"
+                             << "Expected: editing controller A does not change controller B\n";
+            if (isolation.exercised) {
+                instanceEvidence << "Parameter ID: " << isolation.observedParameter << "\n"
+                                 << "Expected B: " << isolation.expectedUntouched << "\n"
+                                 << "Observed B: " << isolation.actualUntouched << "\n"
+                                 << "Result: " << (isolation.knownDefect ? "FAIL" :
+                                                    isolation.warning ? "WARN" : "PASS") << "\n";
+            } else {
+                instanceEvidence << "Result: NOT TESTED / INCONCLUSIVE - no exercised writable parameter\n";
+            }
+            instanceEvidence << "Limit: DSP/audio, per-plugin linking policy and multi-editor UI are not proven.\n\n";
+            instanceEvidence.flush();
+        }
         if (isolation.knownDefect)
             return 1;
         warning = warning || isolation.warning;
