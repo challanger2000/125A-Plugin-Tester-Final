@@ -89,6 +89,10 @@ constexpr const char* kPluginName = "125A QA Bad Callback Heap";
 const FUID kProcessorUID(0x125A1015, 0x20261015, 0x00000000, 0x00000016);
 const FUID kControllerUID(0x125A2015, 0x20261015, 0x00000000, 0x00000026);
 constexpr const char* kPluginName = "125A QA Bad Callback Lock";
+#elif QA_FIXTURE_KIND == 16
+const FUID kProcessorUID(0x125A1016, 0x20261022, 0x00000000, 0x00000017);
+const FUID kControllerUID(0x125A2016, 0x20261022, 0x00000000, 0x00000027);
+constexpr const char* kPluginName = "125A QA Bad Shared Controller";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -209,7 +213,7 @@ public:
 
     tresult PLUGIN_API initialize(FUnknown* context) override {
         const auto result = EditController::initialize(context);
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 16
         if (result == kResultOk) {
             parameters.addParameter(STR16("125A Reference Gain"), STR16("x"), 0, 0.5,
                                     ParameterInfo::kCanAutomate, kQaReferenceGain);
@@ -220,6 +224,22 @@ public:
 #endif
         return result;
     }
+
+#if QA_FIXTURE_KIND == 16
+    // Deliberately broken: all controllers leak one shared parameter value.
+    tresult PLUGIN_API setParamNormalized(ParamID tag, ParamValue value) override {
+        const tresult result = EditController::setParamNormalized(tag, value);
+        if (result == kResultTrue && tag == kQaReferenceGain)
+            sharedGain_ = value;
+        return result;
+    }
+    ParamValue PLUGIN_API getParamNormalized(ParamID tag) override {
+        if (tag == kQaReferenceGain)
+            return sharedGain_;
+        return EditController::getParamNormalized(tag);
+    }
+    static ParamValue sharedGain_;
+#endif
 
     tresult PLUGIN_API setComponentState(IBStream* stream) override {
 #if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
@@ -260,6 +280,10 @@ public:
         return nullptr;
     }
 };
+
+#if QA_FIXTURE_KIND == 16
+ParamValue QAFixtureController::sharedGain_ = 0.5;
+#endif
 
 class QAFixtureProcessor final : public AudioEffect {
 public:
