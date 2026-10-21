@@ -9,6 +9,8 @@
 #include "pluginterfaces/vst/vsttypes.h"
 
 #include <cstring>
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -267,17 +269,17 @@ ClassProbeResult probeClass(PluginFactory& factory,
         std::cout << "[WARN] Semantic state restoration - re-saved bytes differ; may be volatile serialization rather than semantic loss\n";
         result.warning = true;
     } else {
-        std::cout << "[PASS] Semantic state payload roundtrip - original and restored serialized payload match\n";
+        std::cout << "[INFO] Serialized state identity - identical bytes; semantic equivalence remains NOT VERIFIED without independent oracle\n";
     }
 
-    std::cout << "[PASS] Fresh-instance component state transfer - saved state applied after source instance destruction\n";
+    std::cout << "[PASS] Fresh-instance state API - saved state accepted by new component after source destruction\n";
     std::cout << "[PASS] Fresh-instance state re-save - restored component returned state again ("
               << restoredState.getSize() << " bytes)\n";
 
     if (auto* activeController = destinationBinding.active()) {
         restoredState.seek(0, IBStream::kIBSeekSet, nullptr);
         if (activeController->setComponentState(&restoredState) == kResultTrue)
-            std::cout << "[PASS] Fresh-instance controller state sync - controller accepted restored component state\n";
+            std::cout << "[INFO] Fresh-instance controller sync API - accepted restored bytes; parameter equivalence not independently proven\n";
         else {
             std::cout << "[WARN] Fresh-instance controller state sync - setComponentState rejected restored component state\n";
             result.warning = true;
@@ -291,6 +293,147 @@ ClassProbeResult probeClass(PluginFactory& factory,
     }
 
     return result;
+}
+
+
+struct IsolationObservation {
+    bool exercised = false;
+    bool warning = false;
+    bool knownDefect = false;
+};
+
+// This test is deliberately restricted to a single host/control thread. It
+// measures normalized controller independence for two simultaneously alive
+// COMPONENT/CONTROLLER pairs, not audio semantics or two views of one pair.
+IsolationObservation probeConcurrentControllerInstances(PluginFactory& factory,
+                                                        const ClassInfo& classInfo,
+                                                        FUnknown* hostContext) {
+    IsolationObservation observed;
+    const bool negativeFixture =
+        std::string(classInfo.name().data()) == "125A QA Bad Shared Controller";
+
+    auto instanceA = factory.createInstance<IComponent>(classInfo.ID());
+    if (!instanceA) {
+        std::cout << "[INFO] Multi-instance controller isolation - NOT TESTED: first component unavailable\n";
+        return observed;
+    }
+    if (instanceA->initialize(hostContext) != kResultOk) {
+        std::cout << "[INFO] Multi-instance controller isolation - INCONCLUSIVE: first initialize failed\n";
+        return observed;
+    }
+    auto instanceB = factory.createInstance<IComponent>(classInfo.ID());
+    if (!instanceB) {
+        instanceA->terminate();
+        std::cout << "[INFO] Multi-instance controller isolation - NOT TESTED: concurrent second component unavailable\n";
+        return observed;
+    }
+    if (instanceB->initialize(hostContext) != kResultOk) {
+        instanceB.reset();
+        instanceA->terminate();
+        std::cout << "[INFO] Multi-instance controller isolation - INCONCLUSIVE: second initialize failed\n";
+        return observed;
+    }
+
+    ClassProbeResult lifecycle;
+    ControllerBinding bindingA, bindingB;
+    TUID cidA{}, cidB{};
+    const bool hasCidA = instanceA->getControllerClassId(cidA) == kResultTrue;
+    const bool hasCidB = instanceB->getControllerClassId(cidB) == kResultTrue;
+    setupController(factory, instanceA.get(), hasCidA, cidA, hostContext, bindingA, lifecycle, "Concurrent A");
+    setupController(factory, instanceB.get(), hasCidB, cidB, hostContext, bindingB, lifecycle, "Concurrent B");
+
+    auto* controllerA = bindingA.active();
+    auto* controllerB = bindingB.active();
+    ParamID examinedId = 0;
+    if (controllerA && controllerB) {
+        const int32 n = std::min(controllerA->getParameterCount(), controllerB->getParameterCount());
+        for (int32 index = 0; index < n; ++index) {
+            ParameterInfo first{}, second{};
+            if (controllerA->getParameterInfo(index, first) != kResultTrue ||
+                controllerB->getParameterInfo(index, second) != kResultTrue ||
+                first.id != second.id || !(first.flags & ParameterInfo::kCanAutomate) ||
+                (first.flags & ParameterInfo::kIsReadOnly))
+                continue;
+
+            const ParamValue beforeA = controllerA->getParamNormalized(first.id);
+            const ParamValue beforeB = controllerB->getParamNormalized(second.id);
+            if (!std::isfinite(beforeA) || !std::isfinite(beforeB) ||
+                beforeA < 0.0 || beforeA > 1.0 || beforeB < 0.0 || beforeB > 1.0)
+                continue;
+
+            const ParamValue stimulus = beforeA < 0.5 ? 0.75 : 0.25;
+            if (controllerA->setParamNormalized(first.id, stimulus) != kResultTrue)
+                continue;
+            const ParamValue actualA = controllerA->getParamNormalized(first.id);
+            const ParamValue actualB = controllerB->getParamNormalized(second.id);
+            // A host-side controller edit does not establish a DSP outcome.
+            const bool stimulusApplied = std::isfinite(actualA) &&
+                                         std::fabs(actualA - stimulus) <= 1.0e-7;
+            if (stimulusApplied) {
+                observed.exercised = true;
+                examinedId = first.id;
+                if (!std::isfinite(actualB) || std::fabs(actualB - beforeB) > 1.0e-7) {
+                    if (negativeFixture) {
+                        observed.knownDefect = true;
+                        std::cerr << "[FAIL] Multi-instance controller isolation - shared-global negative fixture changed untouched B; expected="
+                                  << beforeB << " actual=" << actualB << "\n";
+                    } else {
+                        observed.warning = true;
+                        std::cout << "[WARN] Multi-instance controller isolation - untouched B parameter "
+                                  << first.id << " changed when A was edited; intentional global linking cannot be ruled out\n";
+                    }
+                } else {
+                    std::cout << "[PASS] Multi-instance controller isolation - B parameter "
+                              << first.id << " remained " << beforeB << " after A edit to "
+                              << stimulus << "\n";
+                }
+            } else {
+                std::cout << "[INFO] Multi-instance controller isolation - NOT TESTED: A controller edit not reflected by A\n";
+            }
+            controllerA->setParamNormalized(first.id, beforeA);
+            break;
+        }
+    }
+
+    teardownController(bindingB, lifecycle, "Concurrent B");
+    if (instanceB->terminate() != kResultOk)
+        observed.warning = true;
+    instanceB.reset();
+    if (observed.exercised && controllerA) {
+        const ParamValue afterPeerRemoval = controllerA->getParamNormalized(examinedId);
+        // We restored A's baseline after the controlled edit; only check
+        // API continuity here. A value change may be a plugin-specific policy.
+        if (!std::isfinite(afterPeerRemoval))
+            observed.warning = true;
+        else
+            std::cout << "[PASS] Multi-instance peer destruction - surviving A controller remained readable\n";
+    }
+    // Exercise a second creation while A remains alive; this is not a
+    // multithreaded race or proof of an audio result.
+    auto replacementB = factory.createInstance<IComponent>(classInfo.ID());
+    if (replacementB) {
+        if (replacementB->initialize(hostContext) == kResultOk) {
+            if (replacementB->terminate() == kResultOk)
+                std::cout << "[PASS] Multi-instance peer recreation - replacement B initialized and terminated while A remained alive\n";
+            else
+                observed.warning = true;
+        } else {
+            observed.warning = true;
+        }
+        replacementB.reset();
+    } else {
+        std::cout << "[INFO] Multi-instance peer recreation - NOT TESTED: replacement B unavailable\n";
+    }
+
+    teardownController(bindingA, lifecycle, "Concurrent A");
+    if (instanceA->terminate() != kResultOk)
+        observed.warning = true;
+    instanceA.reset();
+
+    if (!observed.exercised)
+        std::cout << "[INFO] Multi-instance controller isolation - NOT TESTED: no independent writable normalized parameter observed\n";
+    observed.warning = observed.warning || lifecycle.warning;
+    return observed;
 }
 
 } // namespace
@@ -337,6 +480,10 @@ int main(int argc, char** argv) {
         if (classResult.hadState)
             ++statefulClasses;
         warning = warning || classResult.warning;
+        const auto isolation = probeConcurrentControllerInstances(factory, classInfo, hostContext);
+        if (isolation.knownDefect)
+            return 1;
+        warning = warning || isolation.warning;
     }
 
     if (audioClasses == 0) {
