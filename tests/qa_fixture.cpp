@@ -110,6 +110,10 @@ constexpr const char* kPluginName = "125A QA Good Peer Views";
 const FUID kProcessorUID(0x125A1020, 0x20261022, 0x00000000, 0x00000021);
 const FUID kControllerUID(0x125A2020, 0x20261022, 0x00000000, 0x00000031);
 constexpr const char* kPluginName = "125A QA Bad Peer Views";
+#elif QA_FIXTURE_KIND == 21
+const FUID kProcessorUID(0x125A1021, 0x20261022, 0x00000000, 0x00000022);
+const FUID kControllerUID(0x125A2021, 0x20261022, 0x00000000, 0x00000032);
+constexpr const char* kPluginName = "125A QA Bad Third Restore";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -245,11 +249,11 @@ public:
 
     tresult PLUGIN_API initialize(FUnknown* context) override {
         const auto result = EditController::initialize(context);
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 16 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 16 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
         if (result == kResultOk) {
             parameters.addParameter(STR16("125A Reference Gain"), STR16("x"), 0, 0.5,
                                     ParameterInfo::kCanAutomate, kQaReferenceGain);
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 16
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 16
             parameters.addParameter(STR16("125A Reference Bypass"), nullptr, 1, 0.0,
                                     ParameterInfo::kCanAutomate | ParameterInfo::kIsBypass,
                                     kQaReferenceBypass);
@@ -293,7 +297,7 @@ public:
 #endif
 
     tresult PLUGIN_API setComponentState(IBStream* stream) override {
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21
         if (!stream) return kInvalidArgument;
         double gain = 0.0;
         uint32 bypass = 0;
@@ -366,7 +370,7 @@ public:
     // Positive control explicitly advertises both audio precisions. Without
     // this, the production QA only exercises its 32-bit branch.
     tresult PLUGIN_API canProcessSampleSize(int32 symbolicSampleSize) override {
-#if QA_FIXTURE_KIND == 0 || QA_FIXTURE_KIND == 8 || QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 0 || QA_FIXTURE_KIND == 8 || QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21
         return (symbolicSampleSize == kSample32 || symbolicSampleSize == kSample64)
                    ? kResultTrue : kResultFalse;
 #else
@@ -375,7 +379,7 @@ public:
     }
 
     tresult PLUGIN_API getState(IBStream* stream) override {
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21
         if (!stream) return kInvalidArgument;
         int32 written = 0;
         const double gain = gainNormalized_;
@@ -399,10 +403,15 @@ public:
     }
 
     tresult PLUGIN_API setState(IBStream* stream) override {
+#if QA_FIXTURE_KIND == 21
+        ++restoreCount_;
+        // Broken fixture: falsely return success without restoring on call 3.
+        if (restoreCount_ == 3) return kResultTrue;
+#endif
 #if QA_FIXTURE_KIND == 3
         (void)stream;
         return kResultFalse;
-#elif QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#elif QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21
         if (!stream) return kInvalidArgument;
         double gain = 0.0;
         uint32 bypass = 0;
@@ -448,9 +457,12 @@ public:
     static uint32 stateInstanceCounter_;
     uint32 stateToken_ = 0;
 #endif
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21
     double gainNormalized_ = 0.5;
     bool bypass_ = false;
+#if QA_FIXTURE_KIND == 21
+    uint32 restoreCount_ = 0;
+#endif
 #endif
 
 #if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
@@ -484,7 +496,7 @@ public:
         if (gEditorAttached.load() && data.numSamples > 0)
             return kResultFalse; // Invalid only during concurrent editor/audio usage
 #endif
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21
         if (data.inputParameterChanges) {
             const int32 queues = data.inputParameterChanges->getParameterCount();
             for (int32 i = 0; i < queues; ++i) {
@@ -539,7 +551,7 @@ public:
 #endif
         for (int32 busIndex = 0; busIndex < data.numOutputs; ++busIndex) {
             auto& bus = data.outputs[busIndex];
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
             bus.silenceFlags = 0;
 #else
             bus.silenceFlags = bus.numChannels >= 64
@@ -552,7 +564,7 @@ public:
                     Sample32* out = bus.channelBuffers32 ? bus.channelBuffers32[channel] : nullptr;
                     if (!out)
                         continue;
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21
                     const Sample32* in = (data.inputs && busIndex < data.numInputs &&
                         data.inputs[busIndex].channelBuffers32 &&
                         channel < data.inputs[busIndex].numChannels)
@@ -577,7 +589,7 @@ public:
                     Sample64* out = bus.channelBuffers64 ? bus.channelBuffers64[channel] : nullptr;
                     if (!out)
                         continue;
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21
                     const Sample64* in = (data.inputs && busIndex < data.numInputs &&
                         data.inputs[busIndex].channelBuffers64 &&
                         channel < data.inputs[busIndex].numChannels)
