@@ -455,6 +455,21 @@ bool isInfrastructureFailure(int code) {
     return code == 2 || code == 124 || code == 125 || code == 126 || code == 127;
 }
 
+// The isolated supervisor writes specific guards for crash, timeout or host
+// launch failures. A normally terminated child returning 2 has NO such guard.
+// Preserve any earlier guard and create a final INCONCLUSIVE verdict otherwise.
+int finishInfrastructureFailure(const fs::path& pluginPath,
+                                const std::string& stage, int exitCode) {
+    std::error_code ec;
+    const bool existing = fs::exists(guardReportPath(pluginPath), ec);
+    if (!existing || ec) {
+        writeGuardReport(pluginPath, stage + " infrastructure",
+                         "Probe/host infrastructure returned exit code " +
+                         std::to_string(exitCode), true);
+    }
+    return 2;
+}
+
 bool isExpectedStateResult(int code) {
     return code == 0 || code == 1 || code == 10 || code == 11;
 }
@@ -594,10 +609,16 @@ int wmain(int argc, wchar_t** argv) {
     std::wcout << L"Reload/instantiation isolation: ON | Timeout: 180 s\n";
     const int reloadResult = runPluginStage(reloadProbe, pluginPath, probeTimeoutMs, "Reload/instantiation probe");
     if (reloadResult != 0) {
-        if (reloadResult == 1)
-            writeGuardReport(pluginPath, "Reload/instantiation stress", "Probe returned a deterministic failure", false);
+        if (reloadResult == 1) {
+            writeGuardReport(pluginPath, "Reload/instantiation stress",
+                             "Probe returned a deterministic failure", false);
+            waitForEnter(interactive);
+            return 1;
+        }
+        const int status = finishInfrastructureFailure(pluginPath,
+                                                       "Reload/instantiation", reloadResult);
         waitForEnter(interactive);
-        return 1;
+        return status;
     }
 
     std::wcout << L"Fresh-instance state isolation: ON | Timeout: 180 s\n";
@@ -681,33 +702,21 @@ int wmain(int argc, wchar_t** argv) {
     } else {
         std::wcout << L"Steinberg VST3 validator isolation: ON | Timeout: 300 s\n";
         validatorResult = runPluginStage(validator, pluginPath, validatorTimeoutMs, "Steinberg validator");
-        if (isInfrastructureFailure(validatorResult)) {
-            waitForEnter(interactive);
-            return 1;
-        }
         if (validatorResult != 0 && validatorResult != 1) {
-            writeGuardReport(pluginPath,
-                             "Steinberg validator",
-                             "Validator returned unexpected exit code " + std::to_string(validatorResult),
-                             true);
+            const int status = finishInfrastructureFailure(pluginPath,
+                                                           "Steinberg validator", validatorResult);
             waitForEnter(interactive);
-            return 1;
+            return status;
         }
     }
 
     std::wcout << L"Worker isolation: ON | Timeout: 180 s\n\n";
     const int workerResult = runPluginStage(worker, pluginPath, workerTimeoutMs, "Worker");
-    if (isInfrastructureFailure(workerResult)) {
-        waitForEnter(interactive);
-        return 1;
-    }
     if (workerResult != 0 && workerResult != 1) {
-        writeGuardReport(pluginPath,
-                         "Worker",
-                         "Worker returned unexpected exit code " + std::to_string(workerResult),
-                         true);
+        const int status = finishInfrastructureFailure(pluginPath,
+                                                       "Worker", workerResult);
         waitForEnter(interactive);
-        return 1;
+        return status;
     }
 
     if (!collectWorkerQaReport(pluginPath)) {
