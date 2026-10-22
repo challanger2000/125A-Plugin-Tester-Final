@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(PluginTester125A VERSION 0.3.0 LANGUAGES CXX)
+project(PluginTester125A VERSION 0.3.1 LANGUAGES CXX)
 execute_process(COMMAND git rev-parse --verify HEAD
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   OUTPUT_VARIABLE QA_SOURCE_REVISION
