@@ -668,6 +668,224 @@ bool runEventStress(IComponent* component, IAudioProcessor* processor, const std
                : runEventStressTyped<Sample64>(component, processor, buses, *eventInput, sampleSize);
 }
 
+
+struct ControlledEvent {
+    int32 absoluteSample;
+    int16 pitch;
+    int32 noteId;
+    float velocity;
+    bool noteOn;
+};
+
+// An independent oracle for *our named QA fixtures only*. Arbitrary MIDI
+// instruments can be random, phase-dependent, non-linear or block-sensitive;
+// never declare their audio incorrect using this private fixture contract.
+constexpr ControlledEvent kPartitionEvents[] = {
+    {0,   60, 100, 0.25f, true},
+    {127, 61, 101, 0.40f, true},
+    {128, 62, 102, 0.35f, true},
+    {128, 63, 103, 0.85f, true}, // same sample, explicit arrival precedence
+    {250, 63, 103, 0.00f, false}
+};
+
+struct PartitionObservation {
+    bool completed = false;
+    std::vector<Sample32> pcm;
+    std::vector<int32> eventTimes;
+    std::vector<int32> noteIds;
+    std::vector<int16> pitches;
+};
+
+PartitionObservation renderControlledPartition(PluginFactory& factory,
+                                               const ClassInfo& classInfo,
+                                               FUnknown* hostContext,
+                                               bool split) {
+    PartitionObservation observation;
+    auto component = factory.createInstance<IComponent>(classInfo.ID());
+    if (!component || component->initialize(hostContext) != kResultOk)
+        return observation;
+    IAudioProcessor* processor = nullptr;
+    if (component->queryInterface(IAudioProcessor::iid,
+             reinterpret_cast<void**>(&processor)) != kResultTrue || !processor) {
+        component->terminate();
+        return observation;
+    }
+
+    ProcessSetup setup{};
+    setup.processMode = kRealtime;
+    setup.symbolicSampleSize = kSample32;
+    setup.sampleRate = 48000.;
+    setup.maxSamplesPerBlock = 256;
+    const bool configured = processor->canProcessSampleSize(kSample32) == kResultTrue &&
+                            processor->setupProcessing(setup) == kResultTrue;
+    const bool busReady = configured &&
+        component->activateBus(kAudio, kInput, 0, true) == kResultTrue &&
+        component->activateBus(kAudio, kOutput, 0, true) == kResultTrue &&
+        component->activateBus(kEvent, kInput, 0, true) == kResultTrue &&
+        component->activateBus(kEvent, kOutput, 0, true) == kResultTrue;
+    if (!busReady) {
+        processor->release();
+        component->terminate();
+        return observation;
+    }
+
+    Sample32 inputL[256]{}, inputR[256]{}, outputL[256]{}, outputR[256]{};
+    Sample32* inputPointers[] = {inputL, inputR};
+    Sample32* outputPointers[] = {outputL, outputR};
+    AudioBusBuffers inputBus{}, outputBus{};
+    inputBus.numChannels = 2;
+    inputBus.channelBuffers32 = inputPointers;
+    inputBus.silenceFlags = 3;
+    outputBus.numChannels = 2;
+    outputBus.channelBuffers32 = outputPointers;
+
+    ProcessContext context{};
+    context.sampleRate = 48000.;
+    context.tempo = 120.;
+    context.timeSigNumerator = 4;
+    context.timeSigDenominator = 4;
+    context.state = ProcessContext::kPlaying |
+                    ProcessContext::kTempoValid |
+                    ProcessContext::kTimeSigValid |
+                    ProcessContext::kProjectTimeMusicValid;
+    ProcessData data{};
+    data.processMode = kRealtime;
+    data.symbolicSampleSize = kSample32;
+    data.numInputs = 1;
+    data.numOutputs = 1;
+    data.inputs = &inputBus;
+    data.outputs = &outputBus;
+    data.processContext = &context;
+
+    bool okay = component->setActive(true) == kResultTrue;
+    bool processing = okay && processor->setProcessing(true) == kResultTrue;
+    okay = okay && processing;
+    if (processing) {
+        observation.pcm.reserve(256);
+        for (int start = 0; start < 256 && okay; start += split ? 128 : 256) {
+            const int32 frames = split ? 128 : 256;
+            EventList inputs(16), outputs(16);
+            for (const auto& item : kPartitionEvents) {
+                if (item.absoluteSample < start || item.absoluteSample >= start + frames)
+                    continue;
+                Event e{};
+                e.busIndex = 0;
+                e.sampleOffset = item.absoluteSample - start;
+                e.ppqPosition = static_cast<double>(item.absoluteSample) / 24000.;
+                e.flags = Event::kIsLive;
+                if (item.noteOn) {
+                    e.type = Event::kNoteOnEvent;
+                    e.noteOn.channel = 0;
+                    e.noteOn.pitch = item.pitch;
+                    e.noteOn.noteId = item.noteId;
+                    e.noteOn.velocity = item.velocity;
+                } else {
+                    e.type = Event::kNoteOffEvent;
+                    e.noteOff.channel = 0;
+                    e.noteOff.pitch = item.pitch;
+                    e.noteOff.noteId = item.noteId;
+                    e.noteOff.velocity = 0.f;
+                }
+                if (inputs.addEvent(e) != kResultTrue) okay = false;
+            }
+            std::fill_n(outputL, frames, Sample32(0));
+            std::fill_n(outputR, frames, Sample32(0));
+            context.projectTimeSamples = start;
+            context.projectTimeMusic = static_cast<double>(start) / 24000.;
+            data.numSamples = frames;
+            data.inputEvents = &inputs;
+            data.outputEvents = &outputs;
+            if (!okay || processor->process(data) != kResultOk) {
+                okay = false;
+                break;
+            }
+            for (int32 n = 0; n < frames; ++n) {
+                observation.pcm.push_back(outputL[n]);
+                if (!std::isfinite(outputL[n]) || !std::isfinite(outputR[n]) ||
+                    std::fabs(outputL[n] - outputR[n]) > 1.0e-6f)
+                    okay = false;
+            }
+            for (int32 i = 0; i < outputs.getEventCount(); ++i) {
+                Event emitted{};
+                if (outputs.getEvent(i, emitted) != kResultTrue) { okay = false; break; }
+                observation.eventTimes.push_back(start + emitted.sampleOffset);
+                if (emitted.type == Event::kNoteOnEvent) {
+                    observation.noteIds.push_back(emitted.noteOn.noteId);
+                    observation.pitches.push_back(emitted.noteOn.pitch);
+                } else if (emitted.type == Event::kNoteOffEvent) {
+                    observation.noteIds.push_back(emitted.noteOff.noteId);
+                    observation.pitches.push_back(emitted.noteOff.pitch);
+                } else {
+                    okay = false;
+                }
+            }
+        }
+    }
+    if (processing && processor->setProcessing(false) != kResultTrue) okay = false;
+    if (component->setActive(false) != kResultTrue) okay = false;
+    processor->release();
+    if (component->terminate() != kResultTrue) okay = false;
+    observation.completed = okay;
+    return observation;
+}
+
+bool runPartitionOracle(PluginFactory& factory,
+                        const ClassInfo& classInfo,
+                        FUnknown* hostContext) {
+    const std::string name = classInfo.name().data();
+    const bool good = name == "125A QA Good Event Partition";
+    const bool bad = name == "125A QA Bad Event Partition";
+    if (!good && !bad) {
+        std::cout << "[INFO] SA02 block-partition equivalence - NOT TESTED: "
+                     "arbitrary plugin MIDI/audio semantics have no independent oracle\n";
+        return true;
+    }
+    const auto one = renderControlledPartition(factory, classInfo, hostContext, false);
+    const auto split = renderControlledPartition(factory, classInfo, hostContext, true);
+    if (!one.completed || !split.completed) {
+        std::cerr << "[FAIL] SA02 controlled partition oracle - fixture setup or legal process lifecycle failed\n";
+        return false;
+    }
+    const auto verify = [](const PartitionObservation& x, const char* arrangement) {
+        if (x.pcm.size() != 256 ||
+            x.eventTimes.size() != std::size(kPartitionEvents) ||
+            x.noteIds.size() != std::size(kPartitionEvents) ||
+            x.pitches.size() != std::size(kPartitionEvents))
+            return false;
+        for (size_t i = 0; i < std::size(kPartitionEvents); ++i) {
+            const auto& expected = kPartitionEvents[i];
+            if (x.eventTimes[i] != expected.absoluteSample ||
+                x.noteIds[i] != expected.noteId || x.pitches[i] != expected.pitch)
+                return false;
+        }
+        for (size_t sample = 0; sample < 256; ++sample) {
+            const float expected = sample < 127 ? 0.25f :
+                                   sample == 127 ? 0.40f :
+                                   sample < 250 ? 0.85f : 0.0f;
+            const float actual = x.pcm[sample];
+            if (!std::isfinite(actual) || std::fabs(actual - expected) > 1.0e-6f) {
+                std::cerr << "[INFO] SA02 fixture PCM observation " << arrangement
+                          << " absolute sample=" << sample << " expected=" << expected
+                          << " actual=" << actual << "\n";
+                return false;
+            }
+        }
+        return true;
+    };
+    const bool contiguousOkay = verify(one, "256");
+    const bool splitOkay = verify(split, "128+128");
+    if (!contiguousOkay || !splitOkay) {
+        std::cerr << "[FAIL] SA02 block partition equivalence - independent MIDI/PCM "
+                     "oracle detects missing/reordered simultaneous events; 256="
+                  << contiguousOkay << " 128+128=" << splitOkay << "\n";
+        return false;
+    }
+    std::cout << "[PASS] SA02 block partition equivalence - two independent fresh-instance "
+                 "renders (256 and 128+128) matched 256 non-silent PCM samples/channel "
+                 "and all five absolute MIDI events including the simultaneous ordered pair\n";
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -720,10 +938,11 @@ int main(int argc, char** argv) {
         const bool arrangementsOk = inspectBusArrangements(component.get(), processor);
         const bool sidechainOk = arrangementsOk && runSidechainStress(component.get(), processor, buses);
         const bool eventOk = sidechainOk && runEventStress(component.get(), processor, buses);
+        const bool partitionOk = eventOk && runPartitionOracle(factory, classInfo, hostContext);
 
         processor->release();
         component->terminate();
-        if (!arrangementsOk || !sidechainOk || !eventOk)
+        if (!arrangementsOk || !sidechainOk || !eventOk || !partitionOk)
             return 1;
     }
 
