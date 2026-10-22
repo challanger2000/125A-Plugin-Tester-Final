@@ -28,6 +28,8 @@ namespace {
 
 constexpr int kNotApplicable = 10;
 constexpr int kWarning = 11;
+// Used only on the host/control thread, outside process().
+bool gEvidenceInfrastructureFailure = false;
 
 struct ClassProbeResult {
     bool hadState = false;
@@ -363,13 +365,16 @@ bool probeControlledRecallCycles(PluginFactory& factory,
         return true;
     }
 
-    std::ofstream evidence(ReportPaths::root() /
-        (ReportPaths::baseName(pluginPath) + L"_125A_State_Cycle_Probe.txt"),
-        std::ios::binary | std::ios::trunc);
-    if (evidence)
-        evidence << "Test: repeated inactive state restore A/B/A with audible and controller oracle\n"
-                 << "Scope: controlled known-gain QA fixtures only\n"
-                 << "Input: stereo constant 0.25; expected output: input * (2 * restoredGain)\n";
+    std::ofstream evidence(ReportPaths::stateCycle(pluginPath),
+                           std::ios::binary | std::ios::trunc);
+    if (!evidence) {
+        gEvidenceInfrastructureFailure = true;
+        std::cerr << "[INFO] State cycle evidence INCONCLUSIVE - cannot create output file\n";
+        return false;
+    }
+    evidence << "Test: repeated inactive state restore A/B/A with audible and controller oracle\n"
+             << "Scope: controlled known-gain QA fixtures only\n"
+             << "Input: stereo constant 0.25; expected output: input * (2 * restoredGain)\n";
 
     bool okay = true;
     auto component = factory.createInstance<IComponent>(classInfo.ID());
@@ -491,6 +496,10 @@ bool probeControlledRecallCycles(PluginFactory& factory,
                      << "Observed PCM: " << actualAudio << "\n"
                      << "Result: " << (cyclePassed ? "PASS" : "FAIL") << "\n\n";
             evidence.flush();
+            if (!evidence) {
+                gEvidenceInfrastructureFailure = true;
+                std::cerr << "[INFO] State cycle evidence INCONCLUSIVE - write/flush failed\n";
+            }
         }
         std::cout << (cyclePassed ? "[PASS]" : "[FAIL]")
                   << " Controlled repeated state recall - cycle " << (cycle + 1)
@@ -506,6 +515,11 @@ bool probeControlledRecallCycles(PluginFactory& factory,
     if (component->terminate() != kResultTrue) okay = false;
     component.reset();
     if (lifecycle.warning) okay = false;
+    evidence.close();
+    if (evidence.fail()) {
+        gEvidenceInfrastructureFailure = true;
+        std::cerr << "[INFO] State cycle evidence INCONCLUSIVE - close failed\n";
+    }
     return okay;
 }
 
@@ -684,16 +698,21 @@ int main(int argc, char** argv) {
     const auto classes = factory.classInfos();
 
     std::error_code evidenceError;
-    std::ofstream instanceEvidence;
-    if (ReportPaths::ensureRoot(evidenceError)) {
-        const fs::path evidencePath = ReportPaths::root() /
-            (ReportPaths::baseName(pluginPath) + L"_125A_MultiInstance_Probe.txt");
-        instanceEvidence.open(evidencePath, std::ios::binary | std::ios::trunc);
-        if (instanceEvidence)
-            instanceEvidence << "125A Plugin Tester - concurrent controller-instance oracle\n"
-                             << "Evidence scope: control-thread normalized parameter observations only.\n"
-                             << "Multiple instances are NOT multiple views of one instance.\n\n";
+    if (!ReportPaths::ensureRoot(evidenceError)) {
+        std::cerr << "[INFO] Multi-instance evidence INCONCLUSIVE - report directory not writable\n";
+        return 2;
     }
+    std::ofstream instanceEvidence(ReportPaths::multiInstance(pluginPath),
+                                   std::ios::binary | std::ios::trunc);
+    if (!instanceEvidence) {
+        std::cerr << "[INFO] Multi-instance evidence INCONCLUSIVE - cannot create output file\n";
+        return 2;
+    }
+    instanceEvidence << "125A Plugin Tester - concurrent controller-instance oracle\n"
+                     << "Evidence scope: control-thread normalized parameter observations only.\n"
+                     << "Multiple instances are NOT multiple views of one instance.\n\n";
+    instanceEvidence.flush();
+    if (!instanceEvidence) return 2;
     int audioClasses = 0;
     int statefulClasses = 0;
     bool warning = false;
@@ -710,8 +729,9 @@ int main(int argc, char** argv) {
         if (classResult.hadState)
             ++statefulClasses;
         warning = warning || classResult.warning;
-        if (!probeControlledRecallCycles(factory, classInfo, hostContext, pluginPath))
-            return 1;
+        const bool recallPassed = probeControlledRecallCycles(factory, classInfo, hostContext, pluginPath);
+        if (gEvidenceInfrastructureFailure) return 2;
+        if (!recallPassed) return 1;
         const auto isolation = probeConcurrentControllerInstances(factory, classInfo, hostContext);
         if (instanceEvidence) {
             instanceEvidence << "Class: " << classInfo.name().data() << "\n"
@@ -728,10 +748,20 @@ int main(int argc, char** argv) {
             }
             instanceEvidence << "Limit: DSP/audio, per-plugin linking policy and multi-editor UI are not proven.\n\n";
             instanceEvidence.flush();
+            if (!instanceEvidence) {
+                std::cerr << "[INFO] Multi-instance evidence INCONCLUSIVE - write/flush failed\n";
+                return 2;
+            }
         }
         if (isolation.knownDefect)
             return 1;
         warning = warning || isolation.warning;
+    }
+
+    instanceEvidence.close();
+    if (instanceEvidence.fail()) {
+        std::cerr << "[INFO] Multi-instance evidence INCONCLUSIVE - close failed\n";
+        return 2;
     }
 
     if (audioClasses == 0) {
