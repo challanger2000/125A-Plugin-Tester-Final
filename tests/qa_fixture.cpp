@@ -510,7 +510,8 @@ public:
 #endif
     tresult PLUGIN_API process(ProcessData& data) override {
 #if QA_FIXTURE_KIND == 25 || QA_FIXTURE_KIND == 26
-        if (data.inputEvents && data.inputEvents->getEventCount() > 0 && data.outputEvents) {
+        if (data.inputEvents && data.inputEvents->getEventCount() == 16 &&
+            data.numSamples == 512 && data.outputEvents) {
 #if QA_FIXTURE_KIND == 26
             // Deliberate processing failure with exactly the same valid
             // multiple-event-output bus topology as the positive control.
