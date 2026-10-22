@@ -19,6 +19,11 @@ bool overwrite(const fs::path& path, const std::string& value) {
     return out.good();
 }
 
+class RejectFlushBuffer final : public std::stringbuf {
+public:
+    int sync() override { return -1; }
+};
+
 struct TestCase {
     const char* name;
     std::string qa;
@@ -90,6 +95,25 @@ int wmain() {
             ++fails;
         } else {
             std::cout << "[PASS] Classification: " << item.name << '\n';
+        }
+    }
+
+    // Verifies actual finalization failure, not merely a failed open().
+    {
+        std::ostringstream good;
+        good << "{\"status\":\"PASS\"}";
+        if (!flushChecked(good)) {
+            std::cerr << "[FAIL] JSON flush normal stream falsely rejected\n";
+            ++fails;
+        }
+        RejectFlushBuffer badBuf;
+        std::ostream bad(&badBuf);
+        bad << "{\"status\":\"PASS\"}";
+        if (flushChecked(bad)) {
+            std::cerr << "[FAIL] JSON buffered write accepted rejected flush\n";
+            ++fails;
+        } else {
+            std::cout << "[PASS] JSON buffered write / final flush failure detected\n";
         }
     }
 
