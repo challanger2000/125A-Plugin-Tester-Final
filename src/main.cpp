@@ -646,6 +646,24 @@ void runAudioPattern(IAudioProcessor* processor,
     report.add(Level::Pass, testName, detail.str());
 }
 
+// Testable statistic: the mean is formed exclusively from measured calls to
+// process(). Host sleeps, tracing, sample inspection and pacing are excluded.
+double measuredCallbackMeanUs(const std::vector<double>& blockTimesUs) {
+    if (blockTimesUs.empty()) return 0.0;
+    double total = 0.0;
+    for (const auto us : blockTimesUs) total += us;
+    return total / static_cast<double>(blockTimesUs.size());
+}
+
+bool realtimeTimingMathSelftest() {
+    const std::vector<double> samples = {100.0, 200.0, 225.0};
+    // A fictional 100,000 us total host wall time must not influence the
+    // process mean of 175 us. This is the regression for the former bug.
+    return measuredCallbackMeanUs({}) == 0.0 &&
+           std::abs(measuredCallbackMeanUs(samples) - 175.0) < 1e-12 &&
+           std::abs(measuredCallbackMeanUs(samples) - (100000.0 / 3.0)) > 10000.0;
+}
+
 template <typename Sample>
 void runSustainedProcessing(IAudioProcessor* processor,
                             SymbolicSampleSizes sampleSize,
@@ -767,7 +785,7 @@ void runSustainedProcessing(IAudioProcessor* processor,
     std::ostringstream detail;
     detail << processed << " blocks / " << (processed * numSamples)
            << " samples stable; measured process total=" << measuredProcessTimeUs
-           << " us; actual process mean=" << (processed > 0 ? measuredProcessTimeUs / processed : 0.0)
+           << " us; actual process mean=" << measuredCallbackMeanUs(blockTimesUs)
            << " us/block; overall elapsed incl. paced waits=" << elapsed
            << " us (NOT a DSP performance metric)";
     std::sort(blockTimesUs.begin(), blockTimesUs.end());
@@ -1591,6 +1609,14 @@ int runIsolatedMatrixArgument(const std::string& value) {
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--qa-realtime-timing-selftest") {
+        if (!realtimeTimingMathSelftest()) {
+            std::cerr << "[FAIL] realtime timing math: wall-clock wait leaked into process mean\\n";
+            return 1;
+        }
+        std::cout << "[PASS] realtime timing math: measured mean only, pacing excluded\\n";
+        return 0;
+    }
     if (argc == 2 && std::string(argv[1]).rfind("--matrix-profile=", 0) == 0)
         return runIsolatedMatrixArgument(argv[1]);
     std::cout << "============================================================\n";
