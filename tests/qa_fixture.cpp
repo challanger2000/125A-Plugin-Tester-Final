@@ -249,9 +249,11 @@ public:
         if (result == kResultOk) {
             parameters.addParameter(STR16("125A Reference Gain"), STR16("x"), 0, 0.5,
                                     ParameterInfo::kCanAutomate, kQaReferenceGain);
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 16
             parameters.addParameter(STR16("125A Reference Bypass"), nullptr, 1, 0.0,
                                     ParameterInfo::kCanAutomate | ParameterInfo::kIsBypass,
                                     kQaReferenceBypass);
+#endif
         }
 #endif
         return result;
