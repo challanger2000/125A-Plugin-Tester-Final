@@ -602,11 +602,12 @@ int runEditorLifecycle(const fs::path& pluginPath) {
                 nullptr);
 
             if (!hwnd) {
+                const DWORD windowError = GetLastError();
                 view->release();
                 controller.close();
                 component->terminate();
                 std::cerr << "[INFO] Editor host infrastructure - CreateWindowExW failed on cycle "
-                          << cycle << " (Win32=" << GetLastError() << ")\n";
+                          << cycle << " (Win32=" << windowError << ")\n";
                 return 2;
             }
 
