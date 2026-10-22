@@ -338,7 +338,8 @@ bool acquireController(IComponent* component,
 // contract failed, 2 = host/Win32 resource failure (INCONCLUSIVE).
 int runControlledPeerViewOracle(IEditController* controller, const std::string& className) {
     if (className != "125A QA Good Peer Views" &&
-        className != "125A QA Bad Peer Views") {
+        className != "125A QA Bad Peer Views" &&
+        className != "125A QA Bad Peer Cleanup") {
         std::cout << "[INFO] SA01 peer-view notification - NOT TESTED: "
                      "no general independent visual control/repaint oracle for this plugin\n";
         return true;
