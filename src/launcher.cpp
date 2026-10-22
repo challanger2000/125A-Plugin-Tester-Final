@@ -70,6 +70,20 @@ fs::path validatorReportPath(const fs::path& pluginPath) {
     return ReportPaths::validator(pluginPath);
 }
 
+// Classify by the actual VST3 factory category in the worker report, never
+// by a vendor name, filename or a convenient 0/0 validator summary.
+bool isMixFxCategoryInQaReport(const fs::path& pluginPath) {
+    std::ifstream in(qaReportPath(pluginPath), std::ios::binary);
+    if (!in) return false;
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.find("[INFO] Factory class - ") != std::string::npos &&
+            line.find("category=Audio Mix Processor") != std::string::npos)
+            return true;
+    }
+    return false;
+}
+
 fs::path legacyWorkerQaReportPath(const fs::path& pluginPath) {
     return pluginPath.parent_path() / (pluginPath.stem().wstring() + L"_125A_QA_Report.txt");
 }
@@ -825,11 +839,17 @@ int wmain(int argc, wchar_t** argv) {
     if (!ioAnnotated)
         std::wcerr << L"[WARN] Report annotation - I/O/event result could not be integrated\n";
 
+    const bool specialMixFxCategory = isMixFxCategoryInQaReport(pluginPath);
     const bool validatorAnnotated = validatorResult == 0
         ? annotateReport(pluginPath, "PASS", "Steinberg VST3 validator", "Official Steinberg validator reported one or more completed tests and no failures", 1, 0, 0)
         : validatorResult == 11
             ? annotateReport(pluginPath, "WARN", "Steinberg VST3 validator",
-                             "NOT TESTED: official Steinberg validator executed 0 test cases (0 passed, 0 failed); do not treat as validator PASS",
+                             specialMixFxCategory
+                             ? "NOT TESTED: official Steinberg validator executed 0 test cases (0 passed, 0 failed). "
+                               "Audio Mix Processor is not a standard Steinberg validator target. Independent 125A "
+                               "generic/isolated QA may pass but PreSonus Studio One host-specific MixFX behavior "
+                               "and formal Steinberg test coverage are NOT VERIFIED."
+                             : "NOT TESTED: official Steinberg validator executed 0 test cases (0 passed, 0 failed); do not treat as validator PASS",
                              0, 1, 0)
         : (validatorResult == 10
             ? annotateReport(pluginPath, "INFO", "Steinberg VST3 validator",
