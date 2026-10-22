@@ -678,9 +678,9 @@ bool runEventStressTyped(IComponent* component,
         "default bus activation could not be restored after event stress";
 
     if (!processOk || !finite || !outputEventsValid || !echoComplete || !stopOk || !deactivateOk || !restored) {
-        std::cerr << "[FAIL] Event stress - " <<
-            (firstError.empty() ? "unknown failure with incomplete diagnostics" : firstError)
-            << "\n";
+        std::cerr << (echoContract && !echoComplete ? "[FAIL] Event completeness - " : "[FAIL] Event stress - ")
+                  << (firstError.empty() ? "unknown failure with incomplete diagnostics" : firstError)
+                  << "\n";
         std::cerr << "[INFO] Event stress diagnostics -"
                   << " processOk=" << processOk
                   << " finiteAudio=" << finite
