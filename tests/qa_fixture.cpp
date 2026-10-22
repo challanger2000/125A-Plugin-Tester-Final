@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <vector>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -93,14 +94,34 @@ constexpr const char* kPluginName = "125A QA Bad Callback Lock";
 const FUID kProcessorUID(0x125A1016, 0x20261022, 0x00000000, 0x00000017);
 const FUID kControllerUID(0x125A2016, 0x20261022, 0x00000000, 0x00000027);
 constexpr const char* kPluginName = "125A QA Bad Shared Controller";
+#elif QA_FIXTURE_KIND == 17
+const FUID kProcessorUID(0x125A1017, 0x20261022, 0x00000000, 0x00000018);
+const FUID kControllerUID(0x125A2017, 0x20261022, 0x00000000, 0x00000028);
+constexpr const char* kPluginName = "125A QA Good Event Partition";
+#elif QA_FIXTURE_KIND == 18
+const FUID kProcessorUID(0x125A1018, 0x20261022, 0x00000000, 0x00000019);
+const FUID kControllerUID(0x125A2018, 0x20261022, 0x00000000, 0x00000029);
+constexpr const char* kPluginName = "125A QA Bad Event Partition";
+#elif QA_FIXTURE_KIND == 19
+const FUID kProcessorUID(0x125A1019, 0x20261022, 0x00000000, 0x00000020);
+const FUID kControllerUID(0x125A2019, 0x20261022, 0x00000000, 0x00000030);
+constexpr const char* kPluginName = "125A QA Good Peer Views";
+#elif QA_FIXTURE_KIND == 20
+const FUID kProcessorUID(0x125A1020, 0x20261022, 0x00000000, 0x00000021);
+const FUID kControllerUID(0x125A2020, 0x20261022, 0x00000000, 0x00000031);
+constexpr const char* kPluginName = "125A QA Bad Peer Views";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
 
-#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11
+#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
 
 int gEditorRemovedCount = 0;
 std::atomic<bool> gEditorAttached{false};
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+// Instrumented test fixture: this registry is accessed on the host control thread.
+std::vector<HWND> gPeerWindows;
+#endif
 
 class QAFixtureView final : public FObject, public IPlugView, public IPlugViewContentScaleSupport {
 public:
@@ -118,6 +139,10 @@ public:
             return kInvalidArgument;
         attached_ = true;
         gEditorAttached.store(true);
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+        parentWindow_ = static_cast<HWND>(parent);
+        gPeerWindows.push_back(parentWindow_);
+#endif
         return kResultTrue;
     }
 
@@ -126,6 +151,10 @@ public:
             return kResultFalse;
         attached_ = false;
         gEditorAttached.store(false);
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+        gPeerWindows.erase(std::remove(gPeerWindows.begin(), gPeerWindows.end(), parentWindow_), gPeerWindows.end());
+        parentWindow_ = nullptr;
+#endif
 
 #if QA_FIXTURE_KIND == 6
         ++gEditorRemovedCount;
@@ -198,6 +227,9 @@ private:
     ViewRect rect_{0, 0, 320, 180};
     IPlugFrame* frame_ = nullptr;
     bool attached_ = false;
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+    HWND parentWindow_ = nullptr;
+#endif
 };
 
 #endif
@@ -213,7 +245,7 @@ public:
 
     tresult PLUGIN_API initialize(FUnknown* context) override {
         const auto result = EditController::initialize(context);
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 16
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 16 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
         if (result == kResultOk) {
             parameters.addParameter(STR16("125A Reference Gain"), STR16("x"), 0, 0.5,
                                     ParameterInfo::kCanAutomate, kQaReferenceGain);
@@ -239,6 +271,23 @@ public:
         return EditController::getParamNormalized(tag);
     }
     static ParamValue sharedGain_;
+#endif
+
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+    // Fault fixture 20 updates first attached view only.
+    tresult PLUGIN_API setParamNormalized(ParamID tag, ParamValue value) override {
+        const tresult status = EditController::setParamNormalized(tag, value);
+        if (status == kResultTrue && tag == kQaReferenceGain) {
+            for (HWND peer : gPeerWindows) {
+                if (IsWindow(peer))
+                    InvalidateRect(peer, nullptr, FALSE);
+#if QA_FIXTURE_KIND == 20
+                break;
+#endif
+            }
+        }
+        return status;
+    }
 #endif
 
     tresult PLUGIN_API setComponentState(IBStream* stream) override {
@@ -271,7 +320,7 @@ public:
     }
 
     IPlugView* PLUGIN_API createView(FIDString name) override {
-#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11
+#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
         if (name && std::strcmp(name, ViewType::kEditor) == 0)
             return new QAFixtureView();
 #else
@@ -305,7 +354,7 @@ public:
 
         addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
         addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
-#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13
+#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
         addEventInput(STR16("125A QA Event Echo"), 16);
         addEventOutput(STR16("125A QA Event Echo Out"), 16);
 #endif
@@ -402,6 +451,10 @@ public:
     bool bypass_ = false;
 #endif
 
+#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+    // Bounded fixture state, modified exclusively in process(), not globally.
+    Sample32 noteLevel_ = 0.0f;
+#endif
     tresult PLUGIN_API process(ProcessData& data) override {
 #if QA_FIXTURE_KIND == 14
         void* allocation = ::HeapAlloc(::GetProcessHeap(), 0, 128);
@@ -411,7 +464,7 @@ public:
         if ((callbackCount.fetch_add(1, std::memory_order_relaxed) & 31u) == 31u)
             (void)::WaitForSingleObject(::GetCurrentThread(), 1);
 #endif
-#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13
+#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
         if (data.inputEvents && data.outputEvents) {
             const int32 total = data.inputEvents->getEventCount();
             for (int32 i = 0; i < total; ++i) {
@@ -451,9 +504,40 @@ public:
         if (data.numOutputs <= 0 || data.outputs == nullptr)
             return kResultOk;
 
+#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+        // Independent audio oracle: emitted sample equals velocity of most
+        // recently arrived NoteOn, NoteOff clears it. Simultaneous notes at
+        // one sample use input arrival order. BAD fixture ignores a tied
+        // event when running the partitioned 128-frame callback.
+        Sample32 referenceAudio[512]{};
+        int32 nextEvent = 0;
+        int32 lastEventOffset = -1;
+        for (int32 n = 0; n < data.numSamples && n < 512; ++n) {
+            if (data.inputEvents) {
+                const int32 total = data.inputEvents->getEventCount();
+                while (nextEvent < total) {
+                    Event event{};
+                    if (data.inputEvents->getEvent(nextEvent, event) != kResultTrue)
+                        return kResultFalse;
+                    if (event.sampleOffset > n) break;
+                    ++nextEvent;
+#if QA_FIXTURE_KIND == 18
+                    if (data.numSamples == 128 && event.sampleOffset == lastEventOffset)
+                        continue; // controlled SA02 defect: tie not resolved by arrival order
+#endif
+                    lastEventOffset = event.sampleOffset;
+                    if (event.type == Event::kNoteOnEvent)
+                        noteLevel_ = event.noteOn.velocity;
+                    else if (event.type == Event::kNoteOffEvent)
+                        noteLevel_ = 0.0f;
+                }
+            }
+            referenceAudio[n] = noteLevel_;
+        }
+#endif
         for (int32 busIndex = 0; busIndex < data.numOutputs; ++busIndex) {
             auto& bus = data.outputs[busIndex];
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
             bus.silenceFlags = 0;
 #else
             bus.silenceFlags = bus.numChannels >= 64
@@ -474,6 +558,9 @@ public:
                     const Sample32 gain = static_cast<Sample32>(bypass_ ? 1.0 : 2.0 * gainNormalized_);
                     for (int32 n = 0; n < data.numSamples; ++n)
                         out[n] = (in ? in[n] : Sample32(0)) * gain;
+#elif QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+                    for (int32 n = 0; n < data.numSamples && n < 512; ++n)
+                        out[n] = referenceAudio[n];
 #else
                     if (data.numSamples > 0)
                         std::fill_n(out, data.numSamples, Sample32(0));
