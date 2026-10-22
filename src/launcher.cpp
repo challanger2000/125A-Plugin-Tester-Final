@@ -556,6 +556,8 @@ int wmain(int argc, wchar_t** argv) {
         !clearStaleReport(validatorReportPath(pluginPath)) ||
         !clearStaleReport(ReportPaths::ioEvent(pluginPath)) ||
         !clearStaleReport(ReportPaths::editorLifecycle(pluginPath)) ||
+        !clearStaleReport(ReportPaths::multiInstance(pluginPath)) ||
+        !clearStaleReport(ReportPaths::stateCycle(pluginPath)) ||
         !clearStaleReport(legacyWorkerQaReportPath(pluginPath))) {
         std::wcerr << L"Refusing to start because an old report could be mistaken for the new test result.\n";
         waitForEnter(interactive);
