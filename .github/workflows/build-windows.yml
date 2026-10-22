@@ -515,7 +515,7 @@ jobs:
           if ($productionExes.Count -ne 1) { throw "Portable package must contain exactly one executable; got $($productionExes.Count)" }
           if ($productionExes[0].Name -ne "125A_Plugin_Tester_v0.3.2.exe") { throw "Unexpected portable executable name: $($productionExes[0].Name)" }
           $version = $productionExes[0].VersionInfo
-          if ($version.FileVersion -notmatch '^0\.3\.1(\.0)?$' -or $version.ProductVersion -notmatch '^0\.3\.1(\.0)?$') {
+          if ($version.FileVersion -notmatch '^0\.3\.2(\.0)?$' -or $version.ProductVersion -notmatch '^0\.3\.2(\.0)?$') {
             throw "V0.3 version mismatch in actual portable EXE: FileVersion=$($version.FileVersion) ProductVersion=$($version.ProductVersion)"
           }
           Write-Host "[PASS] Portable filename AND Windows EXE VERSIONINFO confirmed 0.3.2"
