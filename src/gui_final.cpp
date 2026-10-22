@@ -323,6 +323,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
             statusFor(vst, 0, L"") == L"INCONCLUSIVE";
         return valid ? 0 : 31;
     }
+    // QA-only: evaluate the final REAL guard file with the production GUI
+    // status and report-loading routines. No window is opened.
+    if (commandLine && std::wstring(commandLine) == L"--qa-check-live-inconclusive") {
+        wchar_t pluginPath[32768]{};
+        const DWORD n = GetEnvironmentVariableW(L"125A_TESTER_QA_STATUS_VST3",
+                                                pluginPath, 32768);
+        if (!n || n >= 32768) return 32;
+        const fs::path plugin(pluginPath);
+        const std::wstring report = resultTextFor(plugin, 2);
+        if (report.find(L"RESULT: TEST INCONCLUSIVE") == std::wstring::npos)
+            return 33;
+        return statusFor(plugin, 2, report) == L"INCONCLUSIVE" ? 0 : 34;
+    }
     SetProcessDPIAware();
     INITCOMMONCONTROLSEX controls{}; controls.dwSize = sizeof(controls); controls.dwICC = ICC_PROGRESS_CLASS | ICC_LISTVIEW_CLASSES;
     InitCommonControlsEx(&controls);

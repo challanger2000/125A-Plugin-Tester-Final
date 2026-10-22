@@ -1720,6 +1720,21 @@ int main(int argc, char** argv) {
     }
 
     const auto reportPath = ReportPaths::qa(pluginPath);
+    // Internal QA-only Windows fault injection, scoped to the controlled
+    // GainReference VST3. Forces the real report open() to fail AFTER the
+    // launcher's successful stale-report cleanup and normal worker processing.
+    wchar_t injectValue[4]{};
+    if (pluginPath.stem() == L"125A_QA_GainReference" &&
+        GetEnvironmentVariableW(L"125A_TESTER_QA_INJECT_WORKER_REPORT_ERROR",
+                                injectValue, 4) == 1 && injectValue[0] == L'1') {
+        std::error_code injectEc;
+        fs::remove(reportPath, injectEc);  // remove early reload diagnostic
+        if (!injectEc) fs::create_directory(reportPath, injectEc);
+        if (injectEc) {
+            std::cerr << "[INFO] Worker report I/O fault injection failed to prepare\n";
+            return 2;
+        }
+    }
     const bool reportWritten = report.write(reportPath, pluginPath);
     if (!reportWritten) report.add(Level::Warning, "Report", "Could not write QA report");
 
