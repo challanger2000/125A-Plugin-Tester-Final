@@ -702,7 +702,9 @@ int wmain(int argc, wchar_t** argv) {
     } else {
         std::wcout << L"Steinberg VST3 validator isolation: ON | Timeout: 300 s\n";
         validatorResult = runPluginStage(validator, pluginPath, validatorTimeoutMs, "Steinberg validator");
-        if (validatorResult != 0 && validatorResult != 1) {
+        // 11 is an intentionally completed validator invocation that ran
+        // zero actual tests, not a plug-in failure or a host I/O fault.
+        if (validatorResult != 0 && validatorResult != 1 && validatorResult != 11) {
             const int status = finishInfrastructureFailure(pluginPath,
                                                            "Steinberg validator", validatorResult);
             waitForEnter(interactive);
@@ -824,10 +826,14 @@ int wmain(int argc, wchar_t** argv) {
         std::wcerr << L"[WARN] Report annotation - I/O/event result could not be integrated\n";
 
     const bool validatorAnnotated = validatorResult == 0
-        ? annotateReport(pluginPath, "PASS", "Steinberg VST3 validator", "Official Steinberg validator completed successfully", 1, 0, 0)
+        ? annotateReport(pluginPath, "PASS", "Steinberg VST3 validator", "Official Steinberg validator reported one or more completed tests and no failures", 1, 0, 0)
+        : validatorResult == 11
+            ? annotateReport(pluginPath, "WARN", "Steinberg VST3 validator",
+                             "NOT TESTED: official Steinberg validator executed 0 test cases (0 passed, 0 failed); do not treat as validator PASS",
+                             0, 1, 0)
         : (validatorResult == 10
             ? annotateReport(pluginPath, "INFO", "Steinberg VST3 validator",
-                             "Not applicable for a standalone Windows .vst3 binary because the official validator requires a VST3 bundle structure",
+                             "NOT APPLICABLE for standalone .vst3 binary: full Steinberg bundle conformance NOT TESTED",
                              0, 0, 0)
             : annotateReport(pluginPath, "FAIL", "Steinberg VST3 validator", validatorFailureSummary(pluginPath), 0, 0, 1));
     if (!validatorAnnotated)
