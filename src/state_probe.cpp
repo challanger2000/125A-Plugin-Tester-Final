@@ -5,6 +5,7 @@
 #include "pluginterfaces/base/funknown.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
+#include "base/source/fobject.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/vsttypes.h"
@@ -32,6 +33,23 @@ struct ClassProbeResult {
     bool warning = false;
 };
 
+// Host-side controller callback. All registration and parameter test edits
+// happen on this probe's control thread. No calls are made from process().
+class ProbeComponentHandler final : public FObject, public IComponentHandler {
+public:
+    tresult PLUGIN_API beginEdit(ParamID) override { ++begins; return kResultOk; }
+    tresult PLUGIN_API performEdit(ParamID, ParamValue) override { ++edits; return kResultOk; }
+    tresult PLUGIN_API endEdit(ParamID) override { ++ends; return kResultOk; }
+    tresult PLUGIN_API restartComponent(int32) override { ++restarts; return kResultOk; }
+    int begins = 0, edits = 0, ends = 0, restarts = 0;
+
+    OBJ_METHODS(ProbeComponentHandler, FObject)
+    DEFINE_INTERFACES
+        DEF_INTERFACE(IComponentHandler)
+    END_DEFINE_INTERFACES(FObject)
+    REFCOUNT_METHODS(FObject)
+};
+
 struct ControllerBinding {
     IEditController* singleController = nullptr;
     IPtr<IEditController> separateController;
@@ -39,6 +57,7 @@ struct ControllerBinding {
     IConnectionPoint* componentCP = nullptr;
     IConnectionPoint* controllerCP = nullptr;
     bool connected = false;
+    ProbeComponentHandler* handler = nullptr;
 
     IEditController* active() const {
         if (singleController)
@@ -46,6 +65,22 @@ struct ControllerBinding {
         return separateControllerInitialized ? separateController.get() : nullptr;
     }
 };
+
+void installControllerHandler(ControllerBinding& binding, ClassProbeResult& result, const char* phase) {
+    auto* controller = binding.active();
+    if (!controller) return;
+    auto* handler = new ProbeComponentHandler();
+    if (controller->setComponentHandler(handler) == kResultOk) {
+        binding.handler = handler;
+        std::cout << "[PASS] " << phase
+                  << " host handler - IComponentHandler registered on controller thread\n";
+    } else {
+        handler->release();
+        std::cout << "[WARN] " << phase
+                  << " host handler - controller declined standard IComponentHandler registration\n";
+        result.warning = true;
+    }
+}
 
 void setupController(PluginFactory& factory,
                      IComponent* component,
@@ -62,6 +97,7 @@ void setupController(PluginFactory& factory,
                                   reinterpret_cast<void**>(&binding.singleController)) == kResultTrue &&
         binding.singleController) {
         std::cout << "[PASS] " << phase << " controller - single-component controller acquired\n";
+        installControllerHandler(binding, result, phase);
         return;
     }
 
@@ -83,6 +119,7 @@ void setupController(PluginFactory& factory,
         return;
     }
     binding.separateControllerInitialized = true;
+    installControllerHandler(binding, result, phase);
 
     const bool componentHasCP =
         component->queryInterface(IConnectionPoint::iid,
@@ -116,6 +153,21 @@ void setupController(PluginFactory& factory,
 }
 
 void teardownController(ControllerBinding& binding, ClassProbeResult& result, const char* phase) {
+    if (binding.handler) {
+        if (auto* controller = binding.active()) {
+            const tresult code = controller->setComponentHandler(nullptr);
+            if (code != kResultOk) {
+                std::cout << "[WARN] " << phase << " host handler - unregister declined\n";
+                result.warning = true;
+            }
+        }
+        std::cout << "[INFO] " << phase << " host handler - callbacks: begin="
+                  << binding.handler->begins << " perform=" << binding.handler->edits
+                  << " end=" << binding.handler->ends
+                  << " restart=" << binding.handler->restarts << "\n";
+        binding.handler->release();
+        binding.handler = nullptr;
+    }
     if (binding.connected) {
         binding.componentCP->disconnect(binding.controllerCP);
         binding.controllerCP->disconnect(binding.componentCP);
