@@ -27,10 +27,6 @@ fs::path exactPluginPathFromCommandLine() {
     if (argc == 2)
         result = fs::path(argv[1]);
     LocalFree(argv);
-    if (!evidenceWritten) {
-        std::cerr << "[INFO] I/O and event probe evidence INCONCLUSIVE - output file open/write/close failed\n";
-        return 2;
-    }
     return result;
 }
 
@@ -112,5 +108,9 @@ int main(int argc, char** argv) {
     else
         std::cerr << text;
 
+    if (!evidenceWritten) {
+        std::cerr << "[INFO] I/O and event probe evidence INCONCLUSIVE - output file open/write/close failed\n";
+        return 2;
+    }
     return result;
 }
