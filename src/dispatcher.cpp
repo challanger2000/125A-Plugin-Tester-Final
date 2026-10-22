@@ -328,6 +328,13 @@ std::vector<std::string> extractFindings(const std::string& text) {
     return findings;
 }
 
+// A successful buffered insertion is NOT a successful file write. This
+// helper is also exercised with a failing streambuf in the classifier selftest.
+bool flushChecked(std::ostream& output) {
+    output.flush();
+    return output.good();
+}
+
 bool writePluginJson(const fs::path& pluginPath, ScanStatus status, int exitCode) {
     std::error_code ec;
     if (!ReportPaths::ensureRoot(ec))
@@ -371,7 +378,9 @@ bool writePluginJson(const fs::path& pluginPath, ScanStatus status, int exitCode
     }
     out << "  ]\n";
     out << "}\n";
-    return static_cast<bool>(out);
+    if (!flushChecked(out)) return false;
+    out.close();
+    return !out.fail();
 }
 
 struct ScanEntry {
