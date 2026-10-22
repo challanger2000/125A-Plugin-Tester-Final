@@ -509,10 +509,10 @@ public:
         // recently arrived NoteOn, NoteOff clears it. Simultaneous notes at
         // one sample use input arrival order. BAD fixture ignores a tied
         // event when running the partitioned 128-frame callback.
-        Sample32 referenceAudio[512]{};
+        Sample32 referenceAudio[8192]{};
         int32 nextEvent = 0;
         int32 lastEventOffset = -1;
-        for (int32 n = 0; n < data.numSamples && n < 512; ++n) {
+        for (int32 n = 0; n < data.numSamples && n < 8192; ++n) {
             if (data.inputEvents) {
                 const int32 total = data.inputEvents->getEventCount();
                 while (nextEvent < total) {
@@ -559,7 +559,7 @@ public:
                     for (int32 n = 0; n < data.numSamples; ++n)
                         out[n] = (in ? in[n] : Sample32(0)) * gain;
 #elif QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
-                    for (int32 n = 0; n < data.numSamples && n < 512; ++n)
+                    for (int32 n = 0; n < data.numSamples && n < 8192; ++n)
                         out[n] = referenceAudio[n];
 #else
                     if (data.numSamples > 0)
