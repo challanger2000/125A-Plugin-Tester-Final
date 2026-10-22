@@ -716,9 +716,12 @@ void runSustainedProcessing(IAudioProcessor* processor,
         data.numOutputs = static_cast<int32>(outputs.size());
         data.inputs = inputs.empty() ? nullptr : inputs.data();
         data.outputs = outputs.empty() ? nullptr : outputs.data();
-        const auto startBlock = std::chrono::steady_clock::now();
+        // Tracing, output-sample inspection, and report bookkeeping are
+        // host-side work. They must NOT inflate the measured audio callback.
         CallbackImportProbe::Scope importedScope(gImportedApiCoverage > 0);
+        const auto startBlock = std::chrono::steady_clock::now();
         const auto processResult = processor->process(data);
+        const auto endBlock = std::chrono::steady_clock::now();
         const auto imported = importedScope.finish(gImportedApiCoverage);
         tracedHeap += imported.allocations;
         tracedLocks += imported.blockingApis;
@@ -727,7 +730,6 @@ void runSustainedProcessing(IAudioProcessor* processor,
                        "process failed or output non-finite");
             return;
         }
-        const auto endBlock = std::chrono::steady_clock::now();
         const double duration = std::chrono::duration<double, std::micro>(
             endBlock - startBlock).count();
         pacedMaximumUs = std::max(pacedMaximumUs, duration);
