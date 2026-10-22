@@ -603,8 +603,14 @@ int wmain(int argc, wchar_t** argv) {
     std::wcout << L"Fresh-instance state isolation: ON | Timeout: 180 s\n";
     const int stateResult = runPluginStage(stateProbe, pluginPath, probeTimeoutMs, "Fresh-instance state probe");
     if (isInfrastructureFailure(stateResult)) {
+        // A probe's normal exit 2 can represent failed evidence I/O.
+        // Do not convert it into a plugin FAIL or omit the guard.
+        writeGuardReport(pluginPath,
+                         "Fresh-instance state infrastructure",
+                         "State probe could not produce trustworthy evidence; exit code " + std::to_string(stateResult),
+                         true);
         waitForEnter(interactive);
-        return 1;
+        return 2;
     }
     if (!isExpectedStateResult(stateResult)) {
         writeGuardReport(pluginPath,
@@ -628,7 +634,7 @@ int wmain(int argc, wchar_t** argv) {
                          "Probe could not be executed safely; exit code " + std::to_string(editorLifecycleResult),
                          true);
         waitForEnter(interactive);
-        return 1;
+        return 2;
     }
     if (!isExpectedEditorLifecycleResult(editorLifecycleResult)) {
         writeGuardReport(pluginPath,
@@ -642,8 +648,12 @@ int wmain(int argc, wchar_t** argv) {
     std::wcout << L"I/O, sidechain and event isolation: ON | Timeout: 180 s\n";
     const int ioEventResult = runPluginStage(ioEventProbe, pluginPath, probeTimeoutMs, "I/O and event probe");
     if (isInfrastructureFailure(ioEventResult)) {
+        writeGuardReport(pluginPath,
+                         "I/O and event probe infrastructure",
+                         "Probe could not provide trustworthy test evidence; exit code " + std::to_string(ioEventResult),
+                         true);
         waitForEnter(interactive);
-        return 1;
+        return 2;
     }
     if (!isExpectedIOEventResult(ioEventResult)) {
         writeGuardReport(pluginPath,
