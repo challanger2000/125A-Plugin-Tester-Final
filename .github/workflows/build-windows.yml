@@ -327,6 +327,11 @@ jobs:
             Remove-Item Env:125A_PLUGIN_TESTER_REPORT_DIR -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
           }
+          # PowerShell Actions appends an implicit LASTEXITCODE gate. The
+          # deliberately failing child processes return 2 by contract;
+          # after validating all three INCONCLUSIVE classifications, this
+          # QA script itself must return success explicitly.
+          exit 0
 
       - name: Verify serial folder scan and aggregate JSON
         shell: pwsh
