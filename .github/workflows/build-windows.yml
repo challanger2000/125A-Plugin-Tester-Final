@@ -133,9 +133,9 @@ jobs:
           Run-Fixture "125A_QA_BadCallbackHeap" 1 "FAIL" "[FAIL] Callback API tracing"
           Run-Fixture "125A_QA_BadCallbackLock" 0 "WARNING" "[WARN] Callback API tracing"
           Run-Fixture "125A_QA_BadSharedController" 1 "FAIL" "[FAIL] Fresh-instance state verification"
-          Run-Fixture "125A_QA_GoodEventPartition" 0 "PASS" "[PASS] SA02 block partition equivalence"
+          Run-Fixture "125A_QA_GoodEventPartition" 0 "PASS" "[PASS] I/O, sidechain and event isolation" "[PASS] SA02 block partition equivalence"
           Run-Fixture "125A_QA_BadEventPartition" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "[FAIL] SA02 block partition equivalence"
-          Run-Fixture "125A_QA_GoodPeerViews" 0 "PASS" "[PASS] SA01 controlled peer-view notification"
+          Run-Fixture "125A_QA_GoodPeerViews" 0 "PASS" "[PASS] Editor lifecycle / GUI runtime" "" "Result: PASS - SA01 peer-view notification"
           Run-Fixture "125A_QA_BadPeerViews" 1 "FAIL" "[FAIL] Editor lifecycle / GUI runtime" "" "FAIL - SA01 peer-view controller notification oracle"
           # Independent oracle: compare actual B against pre-edit expected B.
           # The good and deliberately defective fixtures run through the SAME
