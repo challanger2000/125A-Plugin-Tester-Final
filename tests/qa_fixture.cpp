@@ -122,6 +122,10 @@ constexpr const char* kPluginName = "125A QA Bad Event Metadata";
 const FUID kProcessorUID(0x125A1023, 0x20261022, 0x00000000, 0x00000024);
 const FUID kControllerUID(0x125A2023, 0x20261022, 0x00000000, 0x00000034);
 constexpr const char* kPluginName = "125A QA Bad Peer Cleanup";
+#elif QA_FIXTURE_KIND == 24
+const FUID kProcessorUID(0x125A1024, 0x20261022, 0x00000000, 0x00000025);
+const FUID kControllerUID(0x125A2024, 0x20261022, 0x00000000, 0x00000035);
+constexpr const char* kPluginName = "125A QA Bad Event Echo Fields";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -377,7 +381,7 @@ public:
 
         addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
         addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
-#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
+#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22 || QA_FIXTURE_KIND == 24
         addEventInput(STR16("125A QA Event Echo"), 16);
         addEventOutput(STR16("125A QA Event Echo Out"), 16);
 #endif
@@ -482,7 +486,7 @@ public:
 #endif
 #endif
 
-#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
+#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22 || QA_FIXTURE_KIND == 24
     // Bounded fixture state, modified exclusively in process(), not globally.
     Sample32 noteLevel_ = 0.0f;
 #endif
@@ -495,7 +499,7 @@ public:
         if ((callbackCount.fetch_add(1, std::memory_order_relaxed) & 31u) == 31u)
             (void)::WaitForSingleObject(::GetCurrentThread(), 1);
 #endif
-#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
+#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22 || QA_FIXTURE_KIND == 24
         if (data.inputEvents && data.outputEvents) {
             const int32 total = data.inputEvents->getEventCount();
             for (int32 i = 0; i < total; ++i) {
@@ -520,6 +524,17 @@ public:
                     event.noteOn.velocity = 0.0f;
                     event.noteOn.tuning = 0.f;
                     event.noteOn.length = 0;
+                }
+#endif
+#if QA_FIXTURE_KIND == 24
+                // Independent negative control for fields the old SA02
+                // oracle did not inspect. Audio processing uses unmodified
+                // INPUT events; the MIDI echo intentionally lies.
+                if (data.numSamples == 128 && event.type == Event::kNoteOnEvent) {
+                    event.flags = 0;
+                    event.ppqPosition += 1.0;
+                    event.noteOn.tuning = 50.0f;
+                    event.noteOn.length = 17;
                 }
 #endif
                 if (data.outputEvents->addEvent(event) != kResultTrue)
@@ -553,7 +568,7 @@ public:
         if (data.numOutputs <= 0 || data.outputs == nullptr)
             return kResultOk;
 
-#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
+#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22 || QA_FIXTURE_KIND == 24
         // Independent audio oracle: emitted sample equals velocity of most
         // recently arrived NoteOn, NoteOff clears it. Simultaneous notes at
         // one sample use input arrival order. BAD fixture ignores a tied
@@ -586,7 +601,7 @@ public:
 #endif
         for (int32 busIndex = 0; busIndex < data.numOutputs; ++busIndex) {
             auto& bus = data.outputs[busIndex];
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22 || QA_FIXTURE_KIND == 24
             bus.silenceFlags = 0;
 #else
             bus.silenceFlags = bus.numChannels >= 64
@@ -607,7 +622,7 @@ public:
                     const Sample32 gain = static_cast<Sample32>(bypass_ ? 1.0 : 2.0 * gainNormalized_);
                     for (int32 n = 0; n < data.numSamples; ++n)
                         out[n] = (in ? in[n] : Sample32(0)) * gain;
-#elif QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
+#elif QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22 || QA_FIXTURE_KIND == 24
                     for (int32 n = 0; n < data.numSamples && n < 8192; ++n)
                         out[n] = referenceAudio[n];
 #else

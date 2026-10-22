@@ -299,7 +299,30 @@ LRESULT CALLBACK professionalWindowProc(HWND window, UINT message, WPARAM wParam
 
 } // namespace
 
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand) {
+// Contract self-test on the production GUI status function, without GUI
+// interaction or dependence on installed third-party VST3 plug-ins.
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCommand) {
+    if (commandLine && std::wstring(commandLine) == L"--qa-status-selftest") {
+        const fs::path vst(L"125A_QA_Status.vst3");
+        const std::wstring infra =
+            L"[FAIL] Host infrastructure - native window unavailable\n"
+            L"RESULT: TEST INCONCLUSIVE\nRELEASE: NOT RECOMMENDED / INCONCLUSIVE\n";
+        const std::wstring pluginFail =
+            L"[FAIL] Plugin lifecycle - bad response\n"
+            L"RESULT: FAIL\nRELEASE: NOT RECOMMENDED\n";
+        const std::wstring passing =
+            L"[PASS] Plugin tests - measured success\n"
+            L"RESULT: 1 PASS / 0 WARNING / 0 FAIL\nRELEASE: PASS\n";
+        const bool valid =
+            statusFor(vst, 1, infra) == L"INCONCLUSIVE" &&
+            statusFor(vst, 2, infra) == L"INCONCLUSIVE" &&
+            statusFor(vst, 1, pluginFail) == L"FAIL" &&
+            statusFor(vst, 0, pluginFail) == L"FAIL" &&
+            statusFor(vst, 0, passing) == L"PASS" &&
+            statusFor(vst, 2, passing) == L"INCONCLUSIVE" &&
+            statusFor(vst, 0, L"") == L"INCONCLUSIVE";
+        return valid ? 0 : 31;
+    }
     SetProcessDPIAware();
     INITCOMMONCONTROLSEX controls{}; controls.dwSize = sizeof(controls); controls.dwICC = ICC_PROGRESS_CLASS | ICC_LISTVIEW_CLASSES;
     InitCommonControlsEx(&controls);

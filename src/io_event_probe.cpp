@@ -701,6 +701,10 @@ struct PartitionObservation {
         int16 pitch = -1;
         int32 noteId = -1;
         float velocity = -1.f;
+        double ppqPosition = -1.;
+        uint16 flags = 0;
+        float tuning = -1000.f;
+        int32 noteLength = -1; // Only NoteOn has a length
     };
     std::vector<OutputEvent> events;
 };
@@ -828,16 +832,22 @@ PartitionObservation renderControlledPartition(PluginFactory& factory,
                 observed.blockLength = frames;
                 observed.type = emitted.type;
                 observed.bus = emitted.busIndex;
+                observed.ppqPosition = emitted.ppqPosition;
+                observed.flags = emitted.flags;
                 if (emitted.type == Event::kNoteOnEvent) {
                     observed.channel = emitted.noteOn.channel;
                     observed.noteId = emitted.noteOn.noteId;
                     observed.pitch = emitted.noteOn.pitch;
                     observed.velocity = emitted.noteOn.velocity;
+                    observed.tuning = emitted.noteOn.tuning;
+                    observed.noteLength = emitted.noteOn.length;
                 } else if (emitted.type == Event::kNoteOffEvent) {
                     observed.channel = emitted.noteOff.channel;
                     observed.noteId = emitted.noteOff.noteId;
                     observed.pitch = emitted.noteOff.pitch;
                     observed.velocity = emitted.noteOff.velocity;
+                    observed.tuning = emitted.noteOff.tuning;
+                    observed.noteLength = -1;
                 } else {
                     okay = false;
                     break;
@@ -860,7 +870,8 @@ bool runPartitionOracle(PluginFactory& factory,
     const std::string name = classInfo.name().data();
     const bool good = name == "125A QA Good Event Partition";
     const bool bad = name == "125A QA Bad Event Partition" ||
-                     name == "125A QA Bad Event Metadata";
+                     name == "125A QA Bad Event Metadata" ||
+                     name == "125A QA Bad Event Echo Fields";
     if (!good && !bad) {
         std::cout << "[INFO] SA02 block-partition equivalence - NOT TESTED: "
                      "arbitrary plugin MIDI/audio semantics have no independent oracle\n";
@@ -889,14 +900,24 @@ bool runPartitionOracle(PluginFactory& factory,
                 actual.bus != 0 || actual.channel != 0 ||
                 actual.noteId != expected.noteId || actual.pitch != expected.pitch ||
                 !std::isfinite(actual.velocity) ||
-                std::fabs(actual.velocity - (expected.noteOn ? expected.velocity : 0.0f)) > 1.0e-6f) {
+                std::fabs(actual.velocity - (expected.noteOn ? expected.velocity : 0.0f)) > 1.0e-6f ||
+                actual.flags != Event::kIsLive ||
+                !std::isfinite(actual.ppqPosition) ||
+                std::fabs(actual.ppqPosition - static_cast<double>(expected.absoluteSample) / 24000.0) > 1.0e-10 ||
+                !std::isfinite(actual.tuning) ||
+                std::fabs(actual.tuning) > 1.0e-6f ||
+                actual.noteLength != (expected.noteOn ? 0 : -1)) {
                 std::cerr << "[INFO] SA02 MIDI field mismatch " << arrangement
                           << " event=" << i << " sample=" << expected.absoluteSample
                           << " expectedType=" << expectedType << " actualType=" << actual.type
                           << " expectedVelocity=" << expected.velocity
                           << " actualVelocity=" << actual.velocity
                           << " expectedBus=0 actualBus=" << actual.bus
-                          << " expectedChannel=0 actualChannel=" << actual.channel << "\n";
+                          << " expectedChannel=0 actualChannel=" << actual.channel
+                           << " expectedFlags=" << Event::kIsLive << " actualFlags=" << actual.flags
+                           << " actualPpq=" << actual.ppqPosition
+                           << " actualTuning=" << actual.tuning
+                           << " actualLength=" << actual.noteLength << "\n";
                 return false;
             }
         }
@@ -924,7 +945,7 @@ bool runPartitionOracle(PluginFactory& factory,
     }
     std::cout << "[PASS] SA02 block partition equivalence - two independent fresh-instance "
                  "renders (256 and 128+128) matched 256 non-silent PCM samples/channel "
-                 "and all five complete MIDI event records (type, bus, channel, velocity, pitch, ID and offset), including simultaneous events\n";
+                 "and all five complete controlled MIDI echo records (type, bus, channel, velocity, pitch, ID, timing, flags, tuning and length), including simultaneous events\n";
     return true;
 }
 

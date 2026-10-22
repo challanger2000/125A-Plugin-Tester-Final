@@ -530,6 +530,10 @@ int summaryCount(const std::wstring& report, const std::wstring& label) {
 
 std::wstring statusFor(const fs::path& input, int exitCode, const std::wstring& report) {
     if (isVst3Path(input)) {
+        // A valid guard with RESULT: TEST INCONCLUSIVE takes precedence
+        // even if the launcher returned legacy exit 1. Match the dispatcher.
+        if (report.find(L"RESULT: TEST INCONCLUSIVE") != std::wstring::npos)
+            return L"INCONCLUSIVE";
         if (exitCode == 1) return L"FAIL";
         if (exitCode != 0 || report.empty() ||
             report.find(L"RESULT: ") == std::wstring::npos ||

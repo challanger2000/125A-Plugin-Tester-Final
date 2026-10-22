@@ -52,17 +52,17 @@ const char* resultLabel(int result) {
     return "UNEXPECTED";
 }
 
-void writeProbeLog(const fs::path& pluginPath, const std::string& text, int result) {
+bool writeProbeLog(const fs::path& pluginPath, const std::string& text, int result) {
     if (pluginPath.empty())
-        return;
+        return false;
 
     std::error_code ec;
     if (!ReportPaths::ensureRoot(ec))
-        return;
+        return false;
 
     std::ofstream out(ReportPaths::ioEvent(pluginPath), std::ios::binary | std::ios::trunc);
     if (!out)
-        return;
+        return false;
 
     const std::string firstFailure = firstFailureLine(text);
 
@@ -73,6 +73,10 @@ void writeProbeLog(const fs::path& pluginPath, const std::string& text, int resu
     out << "FirstFailure: " << (firstFailure.empty() ? "None" : firstFailure) << "\n";
     out << "\n";
     out << text;
+    out.flush();
+    if (!out) return false;
+    out.close();
+    return !out.fail();
 }
 
 } // namespace
@@ -96,7 +100,7 @@ int main(int argc, char** argv) {
     std::cerr.rdbuf(oldErr);
 
     const std::string text = capture.str();
-    writeProbeLog(pluginPath, text, result);
+    const bool evidenceWritten = writeProbeLog(pluginPath, text, result);
 
     // Preserve the diagnostic stream for console/CI use as well as the sidecar report.
     if (result == 0 || result == 10)
@@ -104,5 +108,9 @@ int main(int argc, char** argv) {
     else
         std::cerr << text;
 
+    if (!evidenceWritten) {
+        std::cerr << "[INFO] I/O and event probe evidence INCONCLUSIVE - output file open/write/close failed\n";
+        return 2;
+    }
     return result;
 }
