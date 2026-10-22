@@ -657,27 +657,31 @@ double measuredCallbackMeanUs(const std::vector<double>& blockTimesUs) {
 
 bool realtimeTimingMathSelftest() {
     const std::vector<double> samples = {100.0, 200.0, 225.0};
-    // A fictional 100,000 us total host wall time must not influence the
-    // process mean of 175 us. This is the regression for the former bug.
     if (measuredCallbackMeanUs({}) != 0.0 ||
-        std::abs(measuredCallbackMeanUs(samples) - 175.0) >= 1e-12 ||
-        std::abs(measuredCallbackMeanUs(samples) - (100000.0 / 3.0)) <= 10000.0)
+        std::abs(measuredCallbackMeanUs(samples) - 175.0) >= 1e-12)
         return false;
 
-    // Exercise an actual host-side delay. Its measured wall-clock cost must
-    // remain excluded from the process-only sample vector and its mean.
-    // No hard timing threshold: this selftest must tolerate loaded Windows CI.
-    std::vector<double> processOnlySamples;
-    processOnlySamples.reserve(samples.size());
-    for (const auto sample : samples) {
-        processOnlySamples.push_back(sample);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        if (std::abs(measuredCallbackMeanUs(processOnlySamples) -
-                     measuredCallbackMeanUs(std::vector<double>(
-                         samples.begin(), samples.begin() + processOnlySamples.size()))) >= 1e-12)
-            return false;
+    // Measure a simulated callback separately from host scheduling.
+    // The host-side wait is intentionally large enough to expose accidental
+    // whole-loop measurements, with no fragile absolute CPU speed threshold.
+    std::vector<double> callbackTimesUs;
+    callbackTimesUs.reserve(3);
+    const auto wallStart = std::chrono::steady_clock::now();
+    for (int index = 0; index < 3; ++index) {
+        const auto beginProcess = std::chrono::steady_clock::now();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        const auto endProcess = std::chrono::steady_clock::now();
+        callbackTimesUs.push_back(std::chrono::duration<double, std::microseconds::period>(
+            endProcess - beginProcess).count());
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
-    return std::abs(measuredCallbackMeanUs(processOnlySamples) - 175.0) < 1e-12;
+    const auto totalWallUs = std::chrono::duration<double, std::microseconds::period>(
+        std::chrono::steady_clock::now() - wallStart).count();
+    const double processSumUs = measuredCallbackMeanUs(callbackTimesUs) *
+                                static_cast<double>(callbackTimesUs.size());
+    return callbackTimesUs.size() == 3 &&
+           processSumUs >= 0.0 &&
+           totalWallUs - processSumUs >= 30000.0;
 }
 
 template <typename Sample>
