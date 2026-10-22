@@ -334,7 +334,9 @@ bool acquireController(IComponent* component,
 }
 
 
-bool runControlledPeerViewOracle(IEditController* controller, const std::string& className) {
+// Result 1 = controlled oracle verified/NOT TESTED, 0 = plugin fixture
+// contract failed, 2 = host/Win32 resource failure (INCONCLUSIVE).
+int runControlledPeerViewOracle(IEditController* controller, const std::string& className) {
     if (className != "125A QA Good Peer Views" &&
         className != "125A QA Bad Peer Views") {
         std::cout << "[INFO] SA01 peer-view notification - NOT TESTED: "
@@ -352,21 +354,26 @@ bool runControlledPeerViewOracle(IEditController* controller, const std::string&
         bool attached = false;
     };
     Peer peers[2]{};
-    const auto cleanup = [&] {
+    const auto cleanup = [&]() {
+        bool allRemoved = true;
         for (auto& peer : peers) {
             if (peer.view) {
-                if (peer.attached) peer.view->removed();
-                peer.view->setFrame(nullptr);
+                if (peer.attached && peer.view->removed() != kResultTrue)
+                    allRemoved = false;
+                if (peer.frame && peer.view->setFrame(nullptr) != kResultTrue)
+                    allRemoved = false;
                 peer.attached = false;
             }
             if (peer.frame) peer.frame->release();
-            if (peer.hwnd) DestroyWindow(peer.hwnd);
+            if (peer.hwnd && !DestroyWindow(peer.hwnd)) allRemoved = false;
             if (peer.view) peer.view->release();
             peer = {};
         }
+        return allRemoved;
     };
 
     bool attachedAll = true;
+    bool hostFailure = false;
     for (auto& peer : peers) {
         peer.view = controller->createView(ViewType::kEditor);
         if (!peer.view || peer.view->isPlatformTypeSupported(kPlatformTypeHWND) != kResultTrue) {
@@ -387,7 +394,12 @@ bool runControlledPeerViewOracle(IEditController* controller, const std::string&
                                     CW_USEDEFAULT, CW_USEDEFAULT,
                                     outer.right-outer.left, outer.bottom-outer.top,
                                     nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-        if (!peer.hwnd) { attachedAll = false; break; }
+        if (!peer.hwnd) {
+            hostFailure = true;
+            attachedAll = false;
+            std::cerr << "[INFO] SA01 native host CreateWindowExW failed, Win32=" << GetLastError() << "\n";
+            break;
+        }
         peer.frame = new HostPlugFrame(peer.hwnd);
         if (peer.view->setFrame(peer.frame) != kResultTrue ||
             peer.view->attached(reinterpret_cast<void*>(peer.hwnd), kPlatformTypeHWND) != kResultTrue) {
@@ -400,8 +412,12 @@ bool runControlledPeerViewOracle(IEditController* controller, const std::string&
     }
     if (!attachedAll) {
         cleanup();
-        std::cerr << "[FAIL] SA01 controlled peer-view oracle - could not attach two native views\n";
-        return false;
+        if (hostFailure) {
+            std::cerr << "[INFO] SA01 controlled peer-view oracle INCONCLUSIVE - native host window could not be created\n";
+            return 2;
+        }
+        std::cerr << "[FAIL] SA01 controlled peer-view oracle - plugin fixture refused two native views\n";
+        return 0;
     }
     pumpMessages(30);
     for (auto& peer : peers)
@@ -416,13 +432,14 @@ bool runControlledPeerViewOracle(IEditController* controller, const std::string&
     std::cout << "[INFO] SA01 peer-view observed: parameter " << kReferenceGain
               << " changed=" << changed << ", A invalidated=" << updatedA
               << ", B invalidated=" << updatedB << "\n";
-    controller->setParamNormalized(kReferenceGain, before);
-    cleanup();
-    if (!changed || !updatedA || !updatedB) {
+    const bool restored = controller->setParamNormalized(kReferenceGain, before) == kResultTrue;
+    const bool clean = cleanup();
+    if (!changed || !updatedA || !updatedB || !restored || !clean) {
         std::cerr << "[FAIL] SA01 controlled peer-view notification - expected two native "
                      "HWND invalidations after accepted edit, observed A=" << updatedA
-                  << " B=" << updatedB << "\n";
-        return false;
+                  << " B=" << updatedB << " cleanup=" << clean
+                  << " restore=" << restored << "\n";
+        return 0;
     }
     std::cout << "[PASS] SA01 controlled peer-view notification - both attached HWNDs "
                  "were invalidated by one controller edit; actual rendered UI content NOT TESTED\n";
@@ -477,9 +494,10 @@ int runEditorLifecycle(const fs::path& pluginPath) {
 
     stage.mark("native host window class");
     if (!ensureWindowClass()) {
-        stage.result("FAIL - native host window class");
-        std::cerr << "[FAIL] Editor lifecycle - native host window class registration failed\n";
-        return 1;
+        stage.result("INCONCLUSIVE - native host window class registration failure");
+        std::cerr << "[INFO] Editor host infrastructure - RegisterClassExW failed, Win32="
+                  << GetLastError() << "\n";
+        return 2;
     }
 
     HostApplication hostApplication;
@@ -586,9 +604,9 @@ int runEditorLifecycle(const fs::path& pluginPath) {
                 view->release();
                 controller.close();
                 component->terminate();
-                std::cerr << "[FAIL] Editor lifecycle - native HWND creation failed on cycle "
-                          << cycle << '\n';
-                return 1;
+                std::cerr << "[INFO] Editor host infrastructure - CreateWindowExW failed on cycle "
+                          << cycle << " (Win32=" << GetLastError() << ")\n";
+                return 2;
             }
 
             stage.mark(cyclePrefix + "platform support");
@@ -734,11 +752,14 @@ int runEditorLifecycle(const fs::path& pluginPath) {
         }
 
         stage.mark(std::string("class ") + classInfo.name().data() + " - SA01 dual-view notification oracle");
-        if (!runControlledPeerViewOracle(controller.controller, classInfo.name().data())) {
-            stage.result("FAIL - SA01 peer-view controller notification oracle");
+        const int peerResult = runControlledPeerViewOracle(controller.controller, classInfo.name().data());
+        if (peerResult != 1) {
+            stage.result(peerResult == 2
+                ? "INCONCLUSIVE - SA01 native host window resource failure"
+                : "FAIL - SA01 peer-view controller notification or cleanup oracle");
             controller.close();
             component->terminate();
-            return 1;
+            return peerResult == 2 ? 2 : 1;
         }
         const std::string peerClassName = classInfo.name().data();
         if (peerClassName == "125A QA Good Peer Views")
