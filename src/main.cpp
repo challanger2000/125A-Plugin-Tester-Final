@@ -671,11 +671,11 @@ bool realtimeTimingMathSelftest() {
         const auto beginProcess = std::chrono::steady_clock::now();
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
         const auto endProcess = std::chrono::steady_clock::now();
-        callbackTimesUs.push_back(std::chrono::duration<double, std::microseconds::period>(
+        callbackTimesUs.push_back(std::chrono::duration<double, std::micro>(
             endProcess - beginProcess).count());
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
-    const auto totalWallUs = std::chrono::duration<double, std::microseconds::period>(
+    const auto totalWallUs = std::chrono::duration<double, std::micro>(
         std::chrono::steady_clock::now() - wallStart).count();
     const double processSumUs = measuredCallbackMeanUs(callbackTimesUs) *
                                 static_cast<double>(callbackTimesUs.size());
