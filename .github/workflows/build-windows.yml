@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.2-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence]
   workflow_dispatch:
 
 concurrency:
@@ -53,6 +53,15 @@ jobs:
           if (-not $helper) { throw "125A_Plugin_Tester_GuardSelfTest.exe not found" }
           & $launcher.FullName --guard-selftest $helper.FullName
           if ($LASTEXITCODE -ne 0) { throw "Production launcher guard self-test failed with exit code $LASTEXITCODE" }
+
+      - name: Verify independent DSP callback timing mean
+        shell: pwsh
+        run: |
+          $worker = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester_Worker.exe | Select-Object -First 1
+          if (-not $worker) { throw "Worker executable missing for true DSP timing selftest" }
+          & $worker.FullName --qa-realtime-timing-selftest
+          if ($LASTEXITCODE -ne 0) { throw "Realtime mean must exclude host pacing and sleeps" }
+          Write-Host "[PASS] Real process callback mean independent of host-paced elapsed time"
 
       - name: Verify Steinberg validator self-test
         shell: pwsh
