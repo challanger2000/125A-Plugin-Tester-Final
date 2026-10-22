@@ -1,6 +1,8 @@
 #include "public.sdk/source/main/pluginfactory.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
+#include "public.sdk/source/vst/vstparameters.h"
+#include "pluginterfaces/base/ustring.h"
 #include "base/source/fobject.h"
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/gui/iplugview.h"
@@ -134,6 +136,14 @@ constexpr const char* kPluginName = "125A QA Good Dense Multi MIDI";
 const FUID kProcessorUID(0x125A1026, 0x20261022, 0x00000000, 0x00000027);
 const FUID kControllerUID(0x125A2026, 0x20261022, 0x00000000, 0x00000037);
 constexpr const char* kPluginName = "125A QA Bad Dense Multi MIDI";
+#elif QA_FIXTURE_KIND == 27
+const FUID kProcessorUID(0x125A1027, 0x20261022, 0x00000000, 0x00000028);
+const FUID kControllerUID(0x125A2027, 0x20261022, 0x00000000, 0x00000038);
+constexpr const char* kPluginName = "125A QA Good ReadOnly Meter";
+#elif QA_FIXTURE_KIND == 28
+const FUID kProcessorUID(0x125A1028, 0x20261022, 0x00000000, 0x00000029);
+const FUID kControllerUID(0x125A2028, 0x20261022, 0x00000000, 0x00000039);
+constexpr const char* kPluginName = "125A QA Bad Editable OnOff";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -269,6 +279,20 @@ private:
 
 constexpr ParamID kQaReferenceGain = 0x125A0100;
 constexpr ParamID kQaReferenceBypass = 0x125A0101;
+constexpr ParamID kQaTextProbe = 0x125A0102;
+
+// A meter's display grammar is intentionally NOT an editable input grammar.
+// This is an ordinary read-only status indication, not a faulty VST3 API.
+class QAReadOnlyMeterParameter final : public Parameter {
+public:
+    QAReadOnlyMeterParameter()
+        : Parameter(STR16("QA Read Only Meter"), kQaTextProbe, nullptr, .5,
+                    0, ParameterInfo::kIsReadOnly) {}
+    void toString(ParamValue, String128 text) const override {
+        UString(text, 128).assign(STR16("READY"));
+    }
+    bool fromString(const TChar*, ParamValue&) const override { return false; }
+};
 
 class QAFixtureController final : public EditController {
 public:
@@ -278,6 +302,15 @@ public:
 
     tresult PLUGIN_API initialize(FUnknown* context) override {
         const auto result = EditController::initialize(context);
+#if QA_FIXTURE_KIND == 27
+        if (result == kResultOk)
+            parameters.addParameter(new QAReadOnlyMeterParameter);
+#elif QA_FIXTURE_KIND == 28
+        if (result == kResultOk)
+            parameters.addParameter(new RangeParameter(
+                STR16("QA Editable OnOff"), kQaTextProbe, nullptr, 0.0, 1.0,
+                1.0, 1, ParameterInfo::kCanAutomate));
+#endif
 #if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 16 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         if (result == kResultOk) {
             parameters.addParameter(STR16("125A Reference Gain"), STR16("x"), 0, 0.5,
