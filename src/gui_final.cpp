@@ -313,15 +313,31 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
         const std::wstring passing =
             L"[PASS] Plugin tests - measured success\n"
             L"RESULT: 1 PASS / 0 WARNING / 0 FAIL\nRELEASE: PASS\n";
+        const std::wstring warning =
+            L"[PASS] Plugin tests - measured success\n"
+            L"[WARN] Steinberg VST3 validator - NOT TESTED: 0 tests\n"
+            L"RESULT: 1 PASS / 1 WARNING / 0 FAIL\nRELEASE: REVIEW WARNINGS\n";
         const bool valid =
             statusFor(vst, 1, infra) == L"INCONCLUSIVE" &&
             statusFor(vst, 2, infra) == L"INCONCLUSIVE" &&
             statusFor(vst, 1, pluginFail) == L"FAIL" &&
             statusFor(vst, 0, pluginFail) == L"FAIL" &&
             statusFor(vst, 0, passing) == L"PASS" &&
+            statusFor(vst, 0, warning) == L"WARNING" &&
             statusFor(vst, 2, passing) == L"INCONCLUSIVE" &&
             statusFor(vst, 0, L"") == L"INCONCLUSIVE";
         return valid ? 0 : 31;
+    }
+    if (commandLine && std::wstring(commandLine) == L"--qa-check-live-warning") {
+        wchar_t pluginPath[32768]{};
+        const DWORD n = GetEnvironmentVariableW(L"125A_TESTER_QA_STATUS_VST3",
+                                                pluginPath, 32768);
+        if (!n || n >= 32768) return 35;
+        const fs::path plugin(pluginPath);
+        const std::wstring report = resultTextFor(plugin, 0);
+        if (report.find(L"[WARN] Steinberg VST3 validator - NOT TESTED:") == std::wstring::npos)
+            return 36;
+        return statusFor(plugin, 0, report) == L"WARNING" ? 0 : 37;
     }
     // QA-only: evaluate the final REAL guard file with the production GUI
     // status and report-loading routines. No window is opened.
