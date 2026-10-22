@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-release-gate-infrastructure]
   workflow_dispatch:
 
 concurrency:
@@ -229,6 +229,104 @@ jobs:
           Write-Host "Windows real subprocess evidence I/O fault -> INCONCLUSIVE guard + JSON PASS"
           Write-Host "VST3 fixture QA PASS"
           exit 0
+
+      - name: Verify G3 B01 reload validator and worker infrastructure classifications
+        shell: pwsh
+        run: |
+          # All tests use the real production dispatcher, launcher, worker,
+          # report writer, validator wrapper and compiled GUI status function.
+          # Stage disposable helper EXEs: NEVER remove the real validator core.
+          $names = @(
+            "125A_Plugin_Tester.exe",
+            "125A_Plugin_Tester_Single.exe",
+            "125A_Plugin_Tester_ReloadProbe.exe",
+            "125A_Plugin_Tester_StateProbe.exe",
+            "125A_Plugin_Tester_EditorLifecycleProbe.exe",
+            "125A_Plugin_Tester_IOEventProbe.exe",
+            "125A_Plugin_Tester_SteinbergValidator.exe",
+            "125A_Plugin_Tester_SteinbergValidatorCore.exe",
+            "125A_Plugin_Tester_Worker.exe"
+          )
+          $stage = Join-Path (Get-Location) "build\g3-b01-disposable"
+          $fixture = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_GainReference.vst3" | Select-Object -First 1
+          $gui = Get-ChildItem build -Recurse -File -Filter "125A_Plugin_Tester_GUI.exe" | Select-Object -First 1
+          if (-not $fixture -or -not $gui) { throw "G3 B01: good fixture or production GUI missing" }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          try {
+            foreach ($name in $names) {
+              $source = Get-ChildItem build -Recurse -File -Filter $name |
+                Where-Object { $_.FullName -notlike "$stage*" } |
+                Select-Object -First 1
+              if (-not $source) { throw "G3 B01: helper not found $name" }
+              Copy-Item -LiteralPath $source.FullName -Destination (Join-Path $stage $name)
+              if ($name -eq "125A_Plugin_Tester_SteinbergValidatorCore.exe") {
+                $coreSource = $source.FullName
+              }
+            }
+            $dispatcher = Join-Path $stage "125A_Plugin_Tester.exe"
+            $coreDestination = Join-Path $stage "125A_Plugin_Tester_SteinbergValidatorCore.exe"
+            $env:125A_TESTER_QA_STATUS_VST3 = $fixture.FullName
+            $stem = "125A_QA_GainReference"
+            function Assert-InfrastructureStatus([string]$phase, [int]$exit) {
+              $dir = $env:125A_PLUGIN_TESTER_REPORT_DIR
+              $guard = Get-ChildItem -LiteralPath $dir -File -Filter "${stem}_*_125A_QA_Guard_Report.txt" | Select-Object -First 1
+              $json = Get-ChildItem -LiteralPath $dir -File -Filter "${stem}_*_125A_QA_Report.json" | Select-Object -First 1
+              if ($exit -ne 2 -or -not $guard -or -not $json) {
+                throw "G3 B01 $phase: expected exit 2 + guard + JSON; actual exit=$exit guard=$guard json=$json"
+              }
+              $guardText = Get-Content -LiteralPath $guard.FullName -Raw
+              $jsonResult = Get-Content -LiteralPath $json.FullName -Raw | ConvertFrom-Json
+              if (-not $guardText.Contains("RESULT: TEST INCONCLUSIVE") -or
+                  $jsonResult.status -ne "INCONCLUSIVE" -or $jsonResult.exitCode -ne 2) {
+                throw "G3 B01 $phase: guard/JSON status not INCONCLUSIVE, JSON=$($jsonResult | ConvertTo-Json -Compress)"
+              }
+              $guiCheck = Start-Process -FilePath $gui.FullName -ArgumentList "--qa-check-live-inconclusive" -Wait -PassThru
+              if ($guiCheck.ExitCode -ne 0) {
+                throw "G3 B01 $phase: production GUI misclassified final report, exit=$($guiCheck.ExitCode)"
+              }
+              Write-Host "[PASS] G3 B01 $phase: real subprocess exit 2 -> launcher/guard/JSON/GUI INCONCLUSIVE"
+            }
+
+            # Reload probe's explicit synthetic infrastructure exit is
+            # exercised in the REAL child process after successful preflight.
+            $env:125A_PLUGIN_TESTER_REPORT_DIR = Join-Path $stage "reports-reload"
+            $env:125A_TESTER_QA_INJECT_RELOAD_INFRA_ERROR = "1"
+            try {
+              & $dispatcher $fixture.FullName
+              $reloadExit = $LASTEXITCODE
+            } finally {
+              Remove-Item Env:125A_TESTER_QA_INJECT_RELOAD_INFRA_ERROR -ErrorAction SilentlyContinue
+            }
+            Assert-InfrastructureStatus "reload" $reloadExit
+
+            # Actual missing ValidatorCore on a throwaway EXE copy; never
+            # affect the compiled validator core used by the normal tests.
+            Remove-Item -LiteralPath $coreDestination -Force
+            $env:125A_PLUGIN_TESTER_REPORT_DIR = Join-Path $stage "reports-validator"
+            & $dispatcher $fixture.FullName
+            $validatorExit = $LASTEXITCODE
+            Assert-InfrastructureStatus "validator-core-missing" $validatorExit
+            Copy-Item -LiteralPath $coreSource -Destination $coreDestination
+
+            # The worker opens a real directory as the main QA-report file
+            # only AFTER the normal stale-file preflight and processing.
+            $env:125A_PLUGIN_TESTER_REPORT_DIR = Join-Path $stage "reports-worker"
+            $env:125A_TESTER_QA_INJECT_WORKER_REPORT_ERROR = "1"
+            try {
+              & $dispatcher $fixture.FullName
+              $workerExit = $LASTEXITCODE
+            } finally {
+              Remove-Item Env:125A_TESTER_QA_INJECT_WORKER_REPORT_ERROR -ErrorAction SilentlyContinue
+            }
+            Assert-InfrastructureStatus "worker-report-open" $workerExit
+            Write-Host "G3 B01 release blocker negative tests PASS"
+          } finally {
+            Remove-Item Env:125A_TESTER_QA_INJECT_RELOAD_INFRA_ERROR -ErrorAction SilentlyContinue
+            Remove-Item Env:125A_TESTER_QA_INJECT_WORKER_REPORT_ERROR -ErrorAction SilentlyContinue
+            Remove-Item Env:125A_TESTER_QA_STATUS_VST3 -ErrorAction SilentlyContinue
+            Remove-Item Env:125A_PLUGIN_TESTER_REPORT_DIR -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Verify serial folder scan and aggregate JSON
         shell: pwsh
