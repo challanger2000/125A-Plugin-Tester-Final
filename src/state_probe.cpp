@@ -365,6 +365,22 @@ bool probeControlledRecallCycles(PluginFactory& factory,
         return true;
     }
 
+    // Internal QA-only fault injection: exercise the REAL subprocess,
+    // launcher, dispatcher and JSON classification path under Windows.
+    // This runs only when explicitly set, and only for the named internal
+    // fixture. The directory forces an actual file-open failure AFTER the
+    // launcher's stale-report cleanup, avoiding timing-dependent races.
+    wchar_t injected[4]{};
+    if (name == "125A QA Functional Gain" &&
+        GetEnvironmentVariableW(L"125A_TESTER_QA_INJECT_CYCLE_OPEN_ERROR",
+                                injected, 4) == 1 && injected[0] == L'1') {
+        std::error_code injectionError;
+        fs::create_directory(ReportPaths::stateCycle(pluginPath), injectionError);
+        if (injectionError) {
+            gEvidenceInfrastructureFailure = true;
+            return false;
+        }
+    }
     std::ofstream evidence(ReportPaths::stateCycle(pluginPath),
                            std::ios::binary | std::ios::trunc);
     if (!evidence) {
