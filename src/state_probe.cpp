@@ -14,6 +14,7 @@
 #include <fstream>
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <filesystem>
 #include <iostream>
 #include <string>
