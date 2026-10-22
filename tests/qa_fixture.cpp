@@ -118,15 +118,19 @@ constexpr const char* kPluginName = "125A QA Bad Third Restore";
 const FUID kProcessorUID(0x125A1022, 0x20261022, 0x00000000, 0x00000023);
 const FUID kControllerUID(0x125A2022, 0x20261022, 0x00000000, 0x00000033);
 constexpr const char* kPluginName = "125A QA Bad Event Metadata";
+#elif QA_FIXTURE_KIND == 23
+const FUID kProcessorUID(0x125A1023, 0x20261022, 0x00000000, 0x00000024);
+const FUID kControllerUID(0x125A2023, 0x20261022, 0x00000000, 0x00000034);
+constexpr const char* kPluginName = "125A QA Bad Peer Cleanup";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
 
-#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
 
 int gEditorRemovedCount = 0;
 std::atomic<bool> gEditorAttached{false};
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
 // Instrumented test fixture: this registry is accessed on the host control thread.
 std::vector<HWND> gPeerWindows;
 #endif
@@ -147,7 +151,7 @@ public:
             return kInvalidArgument;
         attached_ = true;
         gEditorAttached.store(true);
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         parentWindow_ = static_cast<HWND>(parent);
         gPeerWindows.push_back(parentWindow_);
 #endif
@@ -159,7 +163,13 @@ public:
             return kResultFalse;
         attached_ = false;
         gEditorAttached.store(false);
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 23
+        // Serial single-view release succeeds; only removing A while B
+        // remains attached reports failure. Our new dual-view oracle must
+        // catch this whereas the historical five serial cycles cannot.
+        const bool failDualCleanup = gPeerWindows.size() > 1;
+#endif
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         gPeerWindows.erase(std::remove(gPeerWindows.begin(), gPeerWindows.end(), parentWindow_), gPeerWindows.end());
         parentWindow_ = nullptr;
 #endif
@@ -170,6 +180,9 @@ public:
             volatile int* crash = nullptr;
             *crash = 125;
         }
+#endif
+#if QA_FIXTURE_KIND == 23
+        if (failDualCleanup) return kResultFalse;
 #endif
         return kResultTrue;
     }
@@ -235,7 +248,7 @@ private:
     ViewRect rect_{0, 0, 320, 180};
     IPlugFrame* frame_ = nullptr;
     bool attached_ = false;
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
     HWND parentWindow_ = nullptr;
 #endif
 };
@@ -253,7 +266,7 @@ public:
 
     tresult PLUGIN_API initialize(FUnknown* context) override {
         const auto result = EditController::initialize(context);
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 16 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 16 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         if (result == kResultOk) {
             parameters.addParameter(STR16("125A Reference Gain"), STR16("x"), 0, 0.5,
                                     ParameterInfo::kCanAutomate, kQaReferenceGain);
@@ -283,8 +296,8 @@ public:
     static ParamValue sharedGain_;
 #endif
 
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
-    // Fault fixture 20 updates first attached view only.
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
+    // Fixture 20 updates first attached view only; fixture 23 has bad teardown.
     tresult PLUGIN_API setParamNormalized(ParamID tag, ParamValue value) override {
         const tresult status = EditController::setParamNormalized(tag, value);
         if (status == kResultTrue && tag == kQaReferenceGain) {
@@ -330,7 +343,7 @@ public:
     }
 
     IPlugView* PLUGIN_API createView(FIDString name) override {
-#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         if (name && std::strcmp(name, ViewType::kEditor) == 0)
             return new QAFixtureView();
 #else
