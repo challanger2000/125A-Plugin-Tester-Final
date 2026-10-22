@@ -88,7 +88,7 @@ public:
         std::ofstream out(path, std::ios::binary);
         if (!out) return false;
         out << "125A Plugin Tester / Quality Checker\n";
-        out << "Version: 0.3.1\n";
+        out << "Version: 0.3.2\n";
         out << "Source revision: " << QA_SOURCE_REVISION << "\n";
         out << "VST3 SDK: v3.8.1_build_84\n";
         out << "Plugin: " << pluginPath.string() << "\n\n";
@@ -1594,7 +1594,7 @@ int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]).rfind("--matrix-profile=", 0) == 0)
         return runIsolatedMatrixArgument(argv[1]);
     std::cout << "============================================================\n";
-    std::cout << "  125A Plugin Tester / Quality Checker v0.3.1\n";
+    std::cout << "  125A Plugin Tester / Quality Checker v0.3.2\n";
     std::cout << "============================================================\n\n";
 
     std::string pathText;
