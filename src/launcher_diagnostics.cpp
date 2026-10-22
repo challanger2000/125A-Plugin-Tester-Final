@@ -373,7 +373,7 @@ int runProcessingStateDiagnostic(const fs::path& pluginPath) {
         return 2;
 
     report << "125A Plugin Tester / setProcessing Return Diagnostic\n";
-    report << "Version: 0.3.0\n";
+    report << "Version: 0.3.1\n";
     report << "Plugin: " << pluginPath.string() << "\n\n";
 
     std::string error;

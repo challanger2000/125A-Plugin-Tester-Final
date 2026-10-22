@@ -371,7 +371,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
     }
 
     const int windowWidth = MulDiv(1100, dpi, 96), windowHeight = MulDiv(760, dpi, 96);
-    HWND window = CreateWindowExW(0, className, L"125A Plugin Tester v0.3.0 / Quality Checker", WS_OVERLAPPEDWINDOW,
+    HWND window = CreateWindowExW(0, className, L"125A Plugin Tester v0.3.1 / Quality Checker", WS_OVERLAPPEDWINDOW,
                                   CW_USEDEFAULT, CW_USEDEFAULT, windowWidth, windowHeight,
                                   nullptr, nullptr, instance, nullptr);
     if (!window) {
