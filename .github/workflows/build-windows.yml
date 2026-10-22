@@ -272,19 +272,19 @@ jobs:
               $guard = Get-ChildItem -LiteralPath $dir -File -Filter "${stem}_*_125A_QA_Guard_Report.txt" | Select-Object -First 1
               $json = Get-ChildItem -LiteralPath $dir -File -Filter "${stem}_*_125A_QA_Report.json" | Select-Object -First 1
               if ($exit -ne 2 -or -not $guard -or -not $json) {
-                throw "G3 B01 $phase: expected exit 2 + guard + JSON; actual exit=$exit guard=$guard json=$json"
+                throw "G3 B01 ${phase}: expected exit 2 + guard + JSON; actual exit=$exit guard=$guard json=$json"
               }
               $guardText = Get-Content -LiteralPath $guard.FullName -Raw
               $jsonResult = Get-Content -LiteralPath $json.FullName -Raw | ConvertFrom-Json
               if (-not $guardText.Contains("RESULT: TEST INCONCLUSIVE") -or
                   $jsonResult.status -ne "INCONCLUSIVE" -or $jsonResult.exitCode -ne 2) {
-                throw "G3 B01 $phase: guard/JSON status not INCONCLUSIVE, JSON=$($jsonResult | ConvertTo-Json -Compress)"
+                throw "G3 B01 ${phase}: guard/JSON status not INCONCLUSIVE, JSON=$($jsonResult | ConvertTo-Json -Compress)"
               }
               $guiCheck = Start-Process -FilePath $gui.FullName -ArgumentList "--qa-check-live-inconclusive" -Wait -PassThru
               if ($guiCheck.ExitCode -ne 0) {
-                throw "G3 B01 $phase: production GUI misclassified final report, exit=$($guiCheck.ExitCode)"
+                throw "G3 B01 ${phase}: production GUI misclassified final report, exit=$($guiCheck.ExitCode)"
               }
-              Write-Host "[PASS] G3 B01 $phase: real subprocess exit 2 -> launcher/guard/JSON/GUI INCONCLUSIVE"
+              Write-Host "[PASS] G3 B01 ${phase}: real subprocess exit 2 -> launcher/guard/JSON/GUI INCONCLUSIVE"
             }
 
             # Reload probe's explicit synthetic infrastructure exit is
