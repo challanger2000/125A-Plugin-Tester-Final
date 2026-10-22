@@ -207,14 +207,35 @@ private:
     HWND hwnd_ = nullptr;
 };
 
+// Minimal, lifetime-bound host implementation. Not IComponentHandler2.
+class EditorHostComponentHandler final : public FObject, public IComponentHandler {
+public:
+    tresult PLUGIN_API beginEdit(ParamID) override { return kResultOk; }
+    tresult PLUGIN_API performEdit(ParamID, ParamValue) override { return kResultOk; }
+    tresult PLUGIN_API endEdit(ParamID) override { return kResultOk; }
+    tresult PLUGIN_API restartComponent(int32) override { return kResultOk; }
+    OBJ_METHODS(EditorHostComponentHandler, FObject)
+    DEFINE_INTERFACES
+        DEF_INTERFACE(IComponentHandler)
+    END_DEFINE_INTERFACES(FObject)
+    REFCOUNT_METHODS(FObject)
+};
+
 struct ControllerHolder {
     IEditController* controller = nullptr;
     IConnectionPoint* componentCP = nullptr;
     IConnectionPoint* controllerCP = nullptr;
     bool initializedSeparately = false;
     bool connected = false;
+    EditorHostComponentHandler* hostHandler = nullptr;
 
     void close() {
+        if (hostHandler) {
+            if (controller)
+                controller->setComponentHandler(nullptr);
+            hostHandler->release();
+            hostHandler = nullptr;
+        }
         if (connected && componentCP && controllerCP) {
             componentCP->disconnect(controllerCP);
             controllerCP->disconnect(componentCP);
@@ -240,6 +261,18 @@ struct ControllerHolder {
     ~ControllerHolder() { close(); }
 };
 
+void registerEditorHostHandler(ControllerHolder& holder) {
+    if (!holder.controller) return;
+    auto* handler = new EditorHostComponentHandler();
+    if (holder.controller->setComponentHandler(handler) == kResultOk) {
+        holder.hostHandler = handler;
+        std::cout << "[PASS] Editor host simulation - IComponentHandler installed on controller thread\n";
+    } else {
+        handler->release();
+        std::cout << "[INFO] Editor host simulation - controller declined handler; no UI semantics inferred\n";
+    }
+}
+
 bool acquireController(IComponent* component,
                        const PluginFactory& factory,
                        FUnknown* hostContext,
@@ -248,6 +281,7 @@ bool acquireController(IComponent* component,
     if (component->queryInterface(IEditController::iid,
                                   reinterpret_cast<void**>(&holder.controller)) == kResultTrue &&
         holder.controller) {
+        registerEditorHostHandler(holder);
         return true;
     }
 
@@ -272,6 +306,7 @@ bool acquireController(IComponent* component,
     }
 
     holder.initializedSeparately = true;
+    registerEditorHostHandler(holder);
 
     const bool componentHasCP =
         component->queryInterface(IConnectionPoint::iid,
