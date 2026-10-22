@@ -756,15 +756,17 @@ uint32 QAFixtureProcessor::stateInstanceCounter_ = 0;
 
 } // namespace
 
+#if QA_FIXTURE_KIND == 29 || QA_FIXTURE_KIND == 30
+#define QA_FIXTURE_CLASS_CATEGORY "Audio Mix Processor"
+#else
+#define QA_FIXTURE_CLASS_CATEGORY kVstAudioEffectClass
+#endif
+
 BEGIN_FACTORY_DEF("125A Internal QA", "https://github.com/challanger2000", "qa@125a.invalid")
 
 DEF_CLASS2(INLINE_UID_FROM_FUID(kProcessorUID),
            PClassInfo::kManyInstances,
-#if QA_FIXTURE_KIND == 29 || QA_FIXTURE_KIND == 30
-           "Audio Mix Processor",
-#else
-           kVstAudioEffectClass,
-#endif
+           QA_FIXTURE_CLASS_CATEGORY,
            kPluginName,
            Vst::kDistributable,
            "Fx",
