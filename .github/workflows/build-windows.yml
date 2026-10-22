@@ -496,6 +496,23 @@ jobs:
             throw "V0.3 version mismatch in actual portable EXE: FileVersion=$($version.FileVersion) ProductVersion=$($version.ProductVersion)"
           }
           Write-Host "[PASS] Portable filename AND Windows EXE VERSIONINFO confirmed 0.3.0"
+          # The portable stub embeds several native helpers. A correct
+          # VERSIONINFO or top-level GUI title alone cannot prove those
+          # helpers and their per-plugin reports were re-versioned.
+          $raw = [System.IO.File]::ReadAllBytes($productionExes[0].FullName)
+          $latin1 = [System.Text.Encoding]::Latin1.GetString($raw)
+          $oldUnicode = [System.Text.Encoding]::Latin1.GetString(
+            [System.Text.Encoding]::Unicode.GetBytes("0.2.10"))
+          if ($latin1.Contains("0.2.10") -or $latin1.Contains($oldUnicode)) {
+            throw "Stale embedded 0.2.10 version literal found in final portable EXE helper payload"
+          }
+          $newUnicode = [System.Text.Encoding]::Latin1.GetString(
+            [System.Text.Encoding]::Unicode.GetBytes("0.3.0"))
+          if (-not $latin1.Contains("0.3.0") -or -not $latin1.Contains($newUnicode)) {
+            throw "Missing ASCII or UTF-16 0.3.0 literal in final portable EXE"
+          }
+          Write-Host "[PASS] Embedded launcher, worker, GUI and resource version literals verified: no 0.2.10"
+
 
       - name: Upload fixture diagnostics on failure
         if: failure()
