@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, develop/v0.3.0-qa-oracles]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final]
   workflow_dispatch:
 
 concurrency:
