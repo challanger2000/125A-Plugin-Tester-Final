@@ -252,10 +252,19 @@ void inspectParameters(IEditController* controller, Reporter& report) {
         }
     }
 
-    // Exercise the user-facing normalized/value/string conversion APIs.
-    // The current value is used so read-only and stepped parameters remain valid.
+    // VST3 requires readable text for ALL parameters, including status meters.
+    // Text -> value is a user editing operation; read-only status, meter, and
+    // clip indications have no meaningful reverse-edit contract.
+    //
+    // Do not confuse exact value roundtrips with display precision: however,
+    // a successful text parser that changes an editable stepped parameter
+    // from 1.0 (ON) to 0.0 (OFF) is an actionable host text-edit problem,
+    // even if the plugin's DSP/automation remains otherwise correct.
     int stringChecked = 0;
     int stringRejected = 0;
+    int stringReadOnlySkipped = 0;
+    int displayFailures = 0;
+    int stringChanged = 0;
     for (int32 i = 0; i < count; ++i) {
         ParameterInfo info{};
         if (controller->getParameterInfo(i, info) != kResultTrue)
@@ -263,29 +272,64 @@ void inspectParameters(IEditController* controller, Reporter& report) {
         const ParamValue initial = controller->getParamNormalized(info.id);
         if (!isNormalized(initial))
             continue;
+        const std::string name = toUtf8(info.title);
+        const std::string identity =
+            "ID " + std::to_string(info.id) + " ('" + name + "'), stepCount=" +
+            std::to_string(info.stepCount);
         String128 display{};
-        if (controller->getParamStringByValue(info.id, initial, display) != kResultTrue) {
-            ++stringRejected;
+        const tresult displayStatus = controller->getParamStringByValue(info.id, initial, display);
+        if (displayStatus != kResultTrue || display[0] == 0) {
+            ++displayFailures;
+            report.add(Level::Warning, "Parameter display text",
+                       identity + " has no usable text at normalized=" +
+                       std::to_string(initial) + "; API result=" +
+                       std::to_string(displayStatus));
             continue;
         }
+
+        const std::string visibleText = toUtf8(display);
+        if ((info.flags & ParameterInfo::kIsReadOnly) != 0) {
+            ++stringReadOnlySkipped;
+            // Valid readable status is enough; accepting text edits for meters,
+            // status/error labels or clip indicators is NOT required.
+            continue;
+        }
+
         ParamValue parsed = 0.0;
-        if (controller->getParamValueByString(info.id, display, parsed) != kResultTrue ||
-            !isNormalized(parsed)) {
+        const tresult parseStatus = controller->getParamValueByString(info.id, display, parsed);
+        if (parseStatus != kResultTrue || !isNormalized(parsed)) {
             ++stringRejected;
+            report.add(Level::Warning, "Parameter text input",
+                       identity + " cannot parse its own display '" +
+                       visibleText + "', normalized=" + std::to_string(initial) +
+                       ", return=" + std::to_string(parseStatus) +
+                       ", parsed=" + std::to_string(parsed));
             continue;
         }
         ++stringChecked;
         if (std::abs(parsed - initial) > 0.025) {
-            report.add(Level::Warning, "Parameter string roundtrip",
-                       "ID " + std::to_string(info.id) + " changed from " +
-                       std::to_string(initial) + " to " + std::to_string(parsed) +
-                       " (formatting can be lossy)");
+            ++stringChanged;
+            const bool discrete = info.stepCount > 0;
+            report.add(Level::Warning, "Parameter text input roundtrip",
+                       identity + ", displayed='" + visibleText +
+                       "', normalized=" + std::to_string(initial) + " -> " +
+                       std::to_string(parsed) +
+                       (discrete ? " (discrete state changed; host text editing risk)" :
+                                   " (check display precision vs parser)"));
         }
     }
-    report.add(stringRejected == 0 ? Level::Pass : Level::Warning,
-               "Parameter string conversion",
-               std::to_string(stringChecked) + " converted, " +
-               std::to_string(stringRejected) + " refused conversion");
+    if (stringReadOnlySkipped != 0)
+        report.add(Level::Info, "Read-only parameter text",
+                   std::to_string(stringReadOnlySkipped) +
+                   " readable read-only parameter(s): reverse text input correctly NOT APPLICABLE");
+    report.add(stringRejected == 0 && displayFailures == 0 && stringChanged == 0
+                   ? Level::Pass : Level::Info,
+               "Parameter string conversion summary",
+               std::to_string(stringChecked) + " editable text roundtrip(s), " +
+               std::to_string(stringRejected) + " invalid editable input(s), " +
+               std::to_string(stringChanged) + " changed editable value(s), " +
+               std::to_string(displayFailures) + " missing display(s), " +
+               std::to_string(stringReadOnlySkipped) + " readable read-only skipped");
 
     if (conversionFailures == 0)
         report.add(Level::Pass, "Parameter conversion stress", std::to_string(conversionsChecked) + " normalized/plain conversions returned finite in-range values");
