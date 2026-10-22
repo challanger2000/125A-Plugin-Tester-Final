@@ -144,6 +144,14 @@ constexpr const char* kPluginName = "125A QA Good ReadOnly Meter";
 const FUID kProcessorUID(0x125A1028, 0x20261022, 0x00000000, 0x00000029);
 const FUID kControllerUID(0x125A2028, 0x20261022, 0x00000000, 0x00000039);
 constexpr const char* kPluginName = "125A QA Bad Editable OnOff";
+#elif QA_FIXTURE_KIND == 29
+const FUID kProcessorUID(0x125A1029, 0x20261022, 0x00000000, 0x00000040);
+const FUID kControllerUID(0x125A2029, 0x20261022, 0x00000000, 0x00000041);
+constexpr const char* kPluginName = "125A QA Good MixFX Category";
+#elif QA_FIXTURE_KIND == 30
+const FUID kProcessorUID(0x125A1030, 0x20261022, 0x00000000, 0x00000042);
+const FUID kControllerUID(0x125A2030, 0x20261022, 0x00000000, 0x00000043);
+constexpr const char* kPluginName = "125A QA Bad MixFX Category";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -504,7 +512,7 @@ public:
     }
 
     tresult PLUGIN_API getBusArrangement(BusDirection dir, int32 busIndex, SpeakerArrangement& arr) override {
-#if QA_FIXTURE_KIND == 4
+#if QA_FIXTURE_KIND == 4 || QA_FIXTURE_KIND == 30
         // Deliberately violate the contract used by the isolated I/O probe:
         // an out-of-range bus index must not be reported as a valid arrangement.
         if (busIndex >= getBusCount(kAudio, dir)) {
@@ -752,7 +760,11 @@ BEGIN_FACTORY_DEF("125A Internal QA", "https://github.com/challanger2000", "qa@1
 
 DEF_CLASS2(INLINE_UID_FROM_FUID(kProcessorUID),
            PClassInfo::kManyInstances,
+#if QA_FIXTURE_KIND == 29 || QA_FIXTURE_KIND == 30
+           "Audio Mix Processor",
+#else
            kVstAudioEffectClass,
+#endif
            kPluginName,
            Vst::kDistributable,
            "Fx",
