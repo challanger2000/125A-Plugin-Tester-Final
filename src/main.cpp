@@ -665,6 +665,9 @@ void runSustainedProcessing(IAudioProcessor* processor,
     std::vector<double> blockTimesUs;
     blockTimesUs.reserve(blocks);
     int deadlineOverruns = 0;
+    double measuredProcessTimeUs = 0.0;
+    // Only time inside IAudioProcessor::process() counts towards the reported
+    // average. Later host-paced sleeps must not inflate the process average.
     constexpr double deadlineUs = 1000000.0 * numSamples / 48000.0;
     for (int i = 0; i < blocks; ++i) {
         clearOutputBuses(outputStorage);
@@ -684,6 +687,7 @@ void runSustainedProcessing(IAudioProcessor* processor,
         const double durationUs = std::chrono::duration<double, std::micro>(
             std::chrono::steady_clock::now() - blockStart).count();
         blockTimesUs.push_back(durationUs);
+        measuredProcessTimeUs += durationUs;
         if (durationUs > deadlineUs) ++deadlineOverruns;
         if (processResult != kResultOk) {
             report.add(Level::Fail, "Sustained processing (" + sizeLabel + ")", "process() failed at block " + std::to_string(i));
@@ -749,6 +753,8 @@ void runSustainedProcessing(IAudioProcessor* processor,
                std::to_string(pacedMaximumUs) + " us, deadline overruns=" +
                std::to_string(pacedCallbackOverruns) +
                ", host scheduling misses=" + std::to_string(pacedSchedulerMisses));
+    // Overall wall time also includes paced-realtime sleeps and host scheduling.
+    // It is diagnostic ONLY, not a per-block DSP cost.
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
 
     if (nonFinite > 0) {
@@ -757,8 +763,11 @@ void runSustainedProcessing(IAudioProcessor* processor,
     }
 
     std::ostringstream detail;
-    detail << processed << " blocks / " << (processed * numSamples) << " samples stable; "
-           << elapsed << " us total; " << (processed > 0 ? elapsed / processed : 0) << " us/block";
+    detail << processed << " blocks / " << (processed * numSamples)
+           << " samples stable; measured process total=" << measuredProcessTimeUs
+           << " us; actual process mean=" << (processed > 0 ? measuredProcessTimeUs / processed : 0.0)
+           << " us/block; overall elapsed incl. paced waits=" << elapsed
+           << " us (NOT a DSP performance metric)";
     std::sort(blockTimesUs.begin(), blockTimesUs.end());
     const auto percentile = [&](double p) {
         if (blockTimesUs.empty()) return 0.0;
@@ -1729,8 +1738,11 @@ int main(int argc, char** argv) {
             report.add(Level::Pass, "IAudioProcessor", "Audio processor interface available");
             // Latency/tail require a successful processing setup; never query here.
             if (isMixFxProcessor) {
-                report.add(Level::Info, "Standard VST3 processing lifecycle",
-                           "Not applicable: Audio Mix Processor uses the host-specific Mix FX channel lifecycle");
+                report.add(Level::Info, "MixFX processing coverage",
+                           "Category Audio Mix Processor: standard VST3 processing lifecycle not invoked "
+                           "in the main worker. Isolated per-format process matrix, I/O/event, "
+                           "reload, state, controller and GUI probes run separately. Actual "
+                           "PreSonus Studio One MixFX multi-channel summing lifecycle NOT VERIFIED.");
             } else {
                 inspectProcessingSetups(processor, report);
                 inspectAudioProcessing(component.get(), activeController, processor, report);
