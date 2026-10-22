@@ -36,7 +36,8 @@ LRESULT CALLBACK hostWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-bool ensureWindowClass() {
+bool ensureWindowClass(DWORD& errorCode) {
+    errorCode = ERROR_SUCCESS;
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = hostWindowProc;
@@ -46,7 +47,8 @@ bool ensureWindowClass() {
 
     if (RegisterClassExW(&wc) != 0)
         return true;
-    return GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+    errorCode = GetLastError(); // capture before any report I/O
+    return errorCode == ERROR_CLASS_ALREADY_EXISTS;
 }
 
 void pumpMessages(DWORD durationMs) {
@@ -356,21 +358,28 @@ int runControlledPeerViewOracle(IEditController* controller, const std::string& 
     };
     Peer peers[2]{};
     const auto cleanup = [&]() {
-        bool allRemoved = true;
+        bool pluginClean = true;
+        bool hostClean = true;
         for (auto& peer : peers) {
             if (peer.view) {
                 if (peer.attached && peer.view->removed() != kResultTrue)
-                    allRemoved = false;
+                    pluginClean = false;
                 if (peer.frame && peer.view->setFrame(nullptr) != kResultTrue)
-                    allRemoved = false;
+                    pluginClean = false;
                 peer.attached = false;
             }
             if (peer.frame) peer.frame->release();
-            if (peer.hwnd && !DestroyWindow(peer.hwnd)) allRemoved = false;
+            if (peer.hwnd && !DestroyWindow(peer.hwnd)) {
+                const DWORD code = GetLastError();
+                std::cerr << "[INFO] SA01 host cleanup INCONCLUSIVE - DestroyWindow failed Win32="
+                          << code << "\n";
+                hostClean = false;
+            }
             if (peer.view) peer.view->release();
             peer = {};
         }
-        return allRemoved;
+        // Return 2 for host failure, 0 for plugin contract failure, 1 OK.
+        return !hostClean ? 2 : (pluginClean ? 1 : 0);
     };
 
     bool attachedAll = true;
@@ -398,7 +407,8 @@ int runControlledPeerViewOracle(IEditController* controller, const std::string& 
         if (!peer.hwnd) {
             hostFailure = true;
             attachedAll = false;
-            std::cerr << "[INFO] SA01 native host CreateWindowExW failed, Win32=" << GetLastError() << "\n";
+            const DWORD createError = GetLastError();
+            std::cerr << "[INFO] SA01 native host CreateWindowExW failed, Win32=" << createError << "\n";
             break;
         }
         peer.frame = new HostPlugFrame(peer.hwnd);
@@ -412,8 +422,8 @@ int runControlledPeerViewOracle(IEditController* controller, const std::string& 
         UpdateWindow(peer.hwnd);
     }
     if (!attachedAll) {
-        cleanup();
-        if (hostFailure) {
+        const int cleanupResult = cleanup();
+        if (hostFailure || cleanupResult == 2) {
             std::cerr << "[INFO] SA01 controlled peer-view oracle INCONCLUSIVE - native host window could not be created\n";
             return 2;
         }
@@ -434,8 +444,12 @@ int runControlledPeerViewOracle(IEditController* controller, const std::string& 
               << " changed=" << changed << ", A invalidated=" << updatedA
               << ", B invalidated=" << updatedB << "\n";
     const bool restored = controller->setParamNormalized(kReferenceGain, before) == kResultTrue;
-    const bool clean = cleanup();
-    if (!changed || !updatedA || !updatedB || !restored || !clean) {
+    const int clean = cleanup();
+    if (clean == 2) {
+        std::cerr << "[INFO] SA01 INCONCLUSIVE - Win32 host cleanup failed\n";
+        return 2;
+    }
+    if (!changed || !updatedA || !updatedB || !restored || clean != 1) {
         std::cerr << "[FAIL] SA01 controlled peer-view notification - expected two native "
                      "HWND invalidations after accepted edit, observed A=" << updatedA
                   << " B=" << updatedB << " cleanup=" << clean
@@ -494,10 +508,11 @@ int runEditorLifecycle(const fs::path& pluginPath) {
     }
 
     stage.mark("native host window class");
-    if (!ensureWindowClass()) {
+    DWORD registerError = ERROR_SUCCESS;
+    if (!ensureWindowClass(registerError)) {
         stage.result("INCONCLUSIVE - native host window class registration failure");
         std::cerr << "[INFO] Editor host infrastructure - RegisterClassExW failed, Win32="
-                  << GetLastError() << "\n";
+                  << registerError << "\n";
         return 2;
     }
 
