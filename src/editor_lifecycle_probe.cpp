@@ -298,6 +298,102 @@ bool acquireController(IComponent* component,
     return true;
 }
 
+
+bool runControlledPeerViewOracle(IEditController* controller, const std::string& className) {
+    if (className != "125A QA Good Peer Views" &&
+        className != "125A QA Bad Peer Views") {
+        std::cout << "[INFO] SA01 peer-view notification - NOT TESTED: "
+                     "no general independent visual control/repaint oracle for this plugin\n";
+        return true;
+    }
+    if (!controller) {
+        std::cerr << "[FAIL] SA01 controlled peer-view oracle - controller missing\n";
+        return false;
+    }
+    struct Peer {
+        IPlugView* view = nullptr;
+        HWND hwnd = nullptr;
+        HostPlugFrame* frame = nullptr;
+        bool attached = false;
+    };
+    Peer peers[2]{};
+    const auto cleanup = [&] {
+        for (auto& peer : peers) {
+            if (peer.view) {
+                if (peer.attached) peer.view->removed();
+                peer.view->setFrame(nullptr);
+                peer.attached = false;
+            }
+            if (peer.frame) peer.frame->release();
+            if (peer.hwnd) DestroyWindow(peer.hwnd);
+            if (peer.view) peer.view->release();
+            peer = {};
+        }
+    };
+
+    bool attachedAll = true;
+    for (auto& peer : peers) {
+        peer.view = controller->createView(ViewType::kEditor);
+        if (!peer.view || peer.view->isPlatformTypeSupported(kPlatformTypeHWND) != kResultTrue) {
+            attachedAll = false;
+            break;
+        }
+        ViewRect size{};
+        if (peer.view->getSize(&size) != kResultTrue ||
+            size.right <= size.left || size.bottom <= size.top) {
+            attachedAll = false;
+            break;
+        }
+        const DWORD style = WS_OVERLAPPEDWINDOW, exStyle = WS_EX_TOOLWINDOW;
+        RECT outer{0,0,size.right-size.left,size.bottom-size.top};
+        AdjustWindowRectEx(&outer, style, FALSE, exStyle);
+        peer.hwnd = CreateWindowExW(exStyle, kWindowClassName,
+                                    L"125A SA01 Peer View Host", style,
+                                    CW_USEDEFAULT, CW_USEDEFAULT,
+                                    outer.right-outer.left, outer.bottom-outer.top,
+                                    nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        if (!peer.hwnd) { attachedAll = false; break; }
+        peer.frame = new HostPlugFrame(peer.hwnd);
+        if (peer.view->setFrame(peer.frame) != kResultTrue ||
+            peer.view->attached(reinterpret_cast<void*>(peer.hwnd), kPlatformTypeHWND) != kResultTrue) {
+            attachedAll = false;
+            break;
+        }
+        peer.attached = true;
+        ShowWindow(peer.hwnd, SW_SHOWNA);
+        UpdateWindow(peer.hwnd);
+    }
+    if (!attachedAll) {
+        cleanup();
+        std::cerr << "[FAIL] SA01 controlled peer-view oracle - could not attach two native views\n";
+        return false;
+    }
+    pumpMessages(30);
+    for (auto& peer : peers)
+        ValidateRect(peer.hwnd, nullptr); // clear previous update regions BEFORE mutation
+    constexpr ParamID kReferenceGain = 0x125A0100;
+    const ParamValue before = controller->getParamNormalized(kReferenceGain);
+    const ParamValue stimulus = before < 0.5 ? 0.75 : 0.25;
+    const bool changed = controller->setParamNormalized(kReferenceGain, stimulus) == kResultTrue &&
+                         std::fabs(controller->getParamNormalized(kReferenceGain) - stimulus) <= 1.0e-7;
+    const bool updatedA = GetUpdateRect(peers[0].hwnd, nullptr, FALSE) != FALSE;
+    const bool updatedB = GetUpdateRect(peers[1].hwnd, nullptr, FALSE) != FALSE;
+    std::cout << "[INFO] SA01 peer-view observed: parameter " << kReferenceGain
+              << " changed=" << changed << ", A invalidated=" << updatedA
+              << ", B invalidated=" << updatedB << "\n";
+    controller->setParamNormalized(kReferenceGain, before);
+    cleanup();
+    if (!changed || !updatedA || !updatedB) {
+        std::cerr << "[FAIL] SA01 controlled peer-view notification - expected two native "
+                     "HWND invalidations after accepted edit, observed A=" << updatedA
+                  << " B=" << updatedB << "\n";
+        return false;
+    }
+    std::cout << "[PASS] SA01 controlled peer-view notification - both attached HWNDs "
+                 "were invalidated by one controller edit; actual rendered UI content NOT TESTED\n";
+    return true;
+}
+
 class StageReport {
 public:
     explicit StageReport(const fs::path& pluginPath)
@@ -602,6 +698,13 @@ int runEditorLifecycle(const fs::path& pluginPath) {
                       << " create/attach/runtime/detach/destroy completed\n";
         }
 
+        stage.mark(std::string("class ") + classInfo.name().data() + " - SA01 dual-view notification oracle");
+        if (!runControlledPeerViewOracle(controller.controller, classInfo.name().data())) {
+            stage.result("FAIL - SA01 peer-view controller notification oracle");
+            controller.close();
+            component->terminate();
+            return 1;
+        }
         stage.mark(std::string("class ") + classInfo.name().data() + " - controller disconnect/terminate");
         controller.close();
         stage.mark(std::string("class ") + classInfo.name().data() + " - component terminate");
