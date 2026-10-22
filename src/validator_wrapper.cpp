@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <cwctype>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -71,9 +74,56 @@ void closeIfValid(HANDLE& handle) {
     }
 }
 
+// 0 = a positive number of tests passed; 1 = test failure;
+// 11 = validator ran but tested NOTHING; 2 = missing/untrustworthy evidence.
+// Checking ONLY the validator process exit code is not enough for Mix FX.
+int classifyValidatorSummary(const std::string& output) {
+    std::istringstream stream(output);
+    std::string line;
+    bool found = false;
+    unsigned int passed = 0;
+    unsigned int failed = 0;
+    while (std::getline(stream, line)) {
+        const auto i = line.find("Result:");
+        if (i == std::string::npos) continue;
+        unsigned int p = 0, f = 0;
+        if (std::sscanf(line.c_str() + i, "Result: %u tests passed, %u tests failed", &p, &f) == 2) {
+            passed = p;
+            failed = f;
+            found = true;
+        }
+    }
+    if (!found) return 2;
+    if (failed > 0) return 1;
+    if (passed == 0) return 11;
+    return 0;
+}
+
+int inspectValidatorSummary(const fs::path& reportPath) {
+    std::ifstream report(reportPath, std::ios::binary);
+    if (!report) return 2;
+    std::ostringstream buffer;
+    buffer << report.rdbuf();
+    if (report.bad()) return 2;
+    return classifyValidatorSummary(buffer.str());
+}
+
+
 } // namespace
 
 int wmain(int argc, wchar_t** argv) {
+    if (argc == 2 && std::wstring(argv[1]) == L"--qa-summary-selftest") {
+        const bool ok =
+            classifyValidatorSummary("Result: 47 tests passed, 0 tests failed\n") == 0 &&
+            classifyValidatorSummary("Result: 0 tests passed, 0 tests failed\r\n") == 11 &&
+            classifyValidatorSummary("Result: 0 tests passed, 1 tests failed\n") == 1 &&
+            classifyValidatorSummary("Result: 46 tests passed, 1 tests failed\n") == 1 &&
+            classifyValidatorSummary("no result\n") == 2 &&
+            classifyValidatorSummary("Result: 0 tests passed, 0 tests failed\nResult: 47 tests passed, 0 tests failed\n") == 0;
+        std::wcout << (ok ? L"[PASS]" : L"[FAIL]")
+                   << L" validator outcome selftest: positive/failed/zero/absent\n";
+        return ok ? 0 : 31;
+    }
     if (argc < 2) {
         std::wcerr << L"usage: 125A_Plugin_Tester_SteinbergValidator.exe <validator arguments>\n";
         return 2;
@@ -213,6 +263,29 @@ int wmain(int argc, wchar_t** argv) {
     if (exitCode == 0xFFFFFFFFu)
         return 1;
 
+    // Internal QA-only control: drive the same production wrapper, launcher,
+    // report and GUI using a synthetic zero-test summary. The GOOD fixture
+    // guard prevents accidental injection into third-party plug-ins.
+    wchar_t injectZero[4]{};
+    if (exitCode == 0u && pluginPath.stem() == L"125A_QA_GoodControl" &&
+        GetEnvironmentVariableW(L"125A_TESTER_QA_INJECT_VALIDATOR_ZERO_TEST", injectZero, 4) == 1 &&
+        injectZero[0] == L'1') {
+        std::ofstream output(reportPath, std::ios::binary | std::ios::trunc);
+        if (!output) return 2;
+        output << "125A QA synthetic zero-case validator summary; NOT original validator evidence\n"
+               << "Result: 0 tests passed, 0 tests failed\n";
+        output.flush();
+        if (!output) return 2;
+        output.close();
+        if (output.fail()) return 2;
+    }
+
+    if (exitCode == 0u && !reportPath.empty()) {
+        // A successful process with zero executed tests is NOT validator PASS.
+        // The actual summary is mandatory; a missing/truncated report is
+        // infrastructure INCONCLUSIVE, not an inferred successful validation.
+        return inspectValidatorSummary(reportPath);
+    }
     if (exitCode == 0u || exitCode == 1u || exitCode == 2u)
         return static_cast<int>(exitCode);
 

@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics]
   workflow_dispatch:
 
 concurrency:
@@ -27,7 +27,7 @@ jobs:
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DSMTG_CREATE_PLUGIN_LINK=0
 
       - name: Build
-        run: cmake --build build --config Release --target PluginTester125ADispatcherSelfTest PluginTester125ADispatcher PluginTester125AGui PluginTester125APortableStub PluginTester125AHelperPacker PluginTester125ALauncher PluginTester125AWorker PluginTester125AReloadProbe PluginTester125AStateProbe PluginTester125AEditorLifecycleProbe PluginTester125AIOEventProbe PluginTester125AValidatorWrapper PluginTester125AGuardSelfTest validator PluginTester125AQAGoodControl PluginTester125AQABadLifecycle PluginTester125AQABadNaN PluginTester125AQABadState PluginTester125AQABadIO PluginTester125AQAGoodEditor PluginTester125AQABadEditor PluginTester125AQABadIgnoredState PluginTester125AQABad64Bit PluginTester125AQAGainReference PluginTester125AQABadGain PluginTester125AQABadConcurrentAudio PluginTester125AQAGoodEventEcho PluginTester125AQABadMissingEvent PluginTester125AQABadCallbackHeap PluginTester125AQABadCallbackLock PluginTester125AQABadSharedController PluginTester125AQAGoodEventPartition PluginTester125AQABadEventPartition PluginTester125AQAGoodPeerViews PluginTester125AQABadPeerViews PluginTester125AQABadThirdRestore PluginTester125AQABadEventMetadata PluginTester125AQABadPeerCleanup PluginTester125AQABadEventEchoFields --parallel
+        run: cmake --build build --config Release --target PluginTester125ADispatcherSelfTest PluginTester125ADispatcher PluginTester125AGui PluginTester125APortableStub PluginTester125AHelperPacker PluginTester125ALauncher PluginTester125AWorker PluginTester125AReloadProbe PluginTester125AStateProbe PluginTester125AEditorLifecycleProbe PluginTester125AIOEventProbe PluginTester125AValidatorWrapper PluginTester125AGuardSelfTest validator PluginTester125AQAGoodControl PluginTester125AQABadLifecycle PluginTester125AQABadNaN PluginTester125AQABadState PluginTester125AQABadIO PluginTester125AQAGoodEditor PluginTester125AQABadEditor PluginTester125AQABadIgnoredState PluginTester125AQABad64Bit PluginTester125AQAGainReference PluginTester125AQABadGain PluginTester125AQABadConcurrentAudio PluginTester125AQAGoodEventEcho PluginTester125AQABadMissingEvent PluginTester125AQABadCallbackHeap PluginTester125AQABadCallbackLock PluginTester125AQABadSharedController PluginTester125AQAGoodEventPartition PluginTester125AQABadEventPartition PluginTester125AQAGoodPeerViews PluginTester125AQABadPeerViews PluginTester125AQABadThirdRestore PluginTester125AQABadEventMetadata PluginTester125AQABadPeerCleanup PluginTester125AQABadEventEchoFields PluginTester125AQAGoodDenseMultiMIDI PluginTester125AQABadDenseMultiMIDI --parallel
 
       - name: Verify dispatcher classification, guard precedence and report errors
         shell: pwsh
@@ -63,6 +63,9 @@ jobs:
           if (-not $validatorCore) { throw "125A_Plugin_Tester_SteinbergValidatorCore.exe not found" }
           & $validator.FullName -selftest
           if ($LASTEXITCODE -ne 0) { throw "Steinberg validator self-test failed with exit code $LASTEXITCODE" }
+          & $validator.FullName --qa-summary-selftest
+          if ($LASTEXITCODE -ne 0) { throw "Validator summary PASS/FAIL/ZERO/MISSING oracle selftest failed" }
+          Write-Host "[PASS] Validator 0/0 cannot masquerade as validator PASS"
 
       - name: Verify tester specificity, sensitivity and JSON with VST3 fixtures
         shell: pwsh
@@ -114,7 +117,7 @@ jobs:
             if ($ioText.Contains("Result: FAIL") -and $ioText.Contains("FirstFailure: None")) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe reported FAIL without a concrete first failure" }
             if ($requiredIoText -and -not $ioText.Contains($requiredIoText)) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe did not contain expected evidence: $requiredIoText" }
             $editorText = Get-Content $editorProbe.FullName -Raw
-            if (-not $editorText.Contains("Version: 0.2.10")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
+            if (-not $editorText.Contains("Version: 0.3.0")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
             if ($requiredEditorText -and -not $editorText.Contains($requiredEditorText)) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe did not contain expected evidence: $requiredEditorText" }
             $jsonData = Get-Content $json.FullName -Raw | ConvertFrom-Json
             if ($jsonData.schemaVersion -ne 1) { throw "$name JSON schemaVersion was not 1" }
@@ -145,6 +148,8 @@ jobs:
           Run-Fixture "125A_QA_BadPeerCleanup" 1 "FAIL" "[FAIL] Editor lifecycle / GUI runtime" "" "FAIL - SA01 peer-view controller notification or cleanup oracle"
           Run-Fixture "125A_QA_BadEventMetadata" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "[FAIL] SA02 block partition equivalence"
           Run-Fixture "125A_QA_BadEventEchoFields" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "[FAIL] SA02 block partition equivalence"
+          Run-Fixture "125A_QA_GoodDenseMultiMIDI" 0 "PASS" "0 WARNING / 0 FAIL" "output events=640"
+          Run-Fixture "125A_QA_BadDenseMultiMIDI" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "FirstFailure: Event stress - process() returned "
           Run-Fixture "125A_QA_BadThirdRestore" 1 "FAIL" "[FAIL] Fresh-instance state verification"
           # A-B-A sequence: semantic expectation independently checked by
           # controller normalized value, re-serialized logical gain and PCM.
@@ -228,6 +233,47 @@ jobs:
           }
           Write-Host "Windows real subprocess evidence I/O fault -> INCONCLUSIVE guard + JSON PASS"
           Write-Host "VST3 fixture QA PASS"
+          exit 0
+
+      - name: Verify zero-test Steinberg validator reports WARNING not PASS
+        shell: pwsh
+        run: |
+          $dispatcher = Get-ChildItem build -Recurse -File -Filter "125A_Plugin_Tester.exe" | Select-Object -First 1
+          $gui = Get-ChildItem build -Recurse -File -Filter "125A_Plugin_Tester_GUI.exe" | Select-Object -First 1
+          $fixture = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_GoodControl.vst3" | Select-Object -First 1
+          if (-not $dispatcher -or -not $gui -or -not $fixture) { throw "Missing production dispatcher, GUI or GoodControl fixture" }
+          $reports = Join-Path (Get-Location) "build\qa-validator-zero"
+          New-Item -ItemType Directory -Force -Path $reports | Out-Null
+          $env:125A_PLUGIN_TESTER_REPORT_DIR = $reports
+          $env:125A_TESTER_QA_INJECT_VALIDATOR_ZERO_TEST = "1"
+          $env:125A_TESTER_QA_STATUS_VST3 = $fixture.FullName
+          try {
+            & $dispatcher.FullName $fixture.FullName
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -ne 0) { throw "GoodControl with zero validator tests must finish as WARNING (exit 0), exit=$exitCode" }
+            $qa = Get-ChildItem $reports -File -Filter "125A_QA_GoodControl_*_125A_QA_Report.txt" | Select-Object -First 1
+            $json = Get-ChildItem $reports -File -Filter "125A_QA_GoodControl_*_125A_QA_Report.json" | Select-Object -First 1
+            $validator = Get-ChildItem $reports -File -Filter "125A_QA_GoodControl_*_125A_Steinberg_Validator.txt" | Select-Object -First 1
+            $guard = Get-ChildItem $reports -File -Filter "125A_QA_GoodControl_*_125A_QA_Guard_Report.txt" | Select-Object -First 1
+            if (-not $qa -or -not $json -or -not $validator -or $guard) { throw "Zero-test validator report/JSON/evidence/guard mismatch" }
+            $text = Get-Content $qa.FullName -Raw
+            $jt = Get-Content $json.FullName -Raw | ConvertFrom-Json
+            $vt = Get-Content $validator.FullName -Raw
+            if ($text -notmatch '\[WARN\] Steinberg VST3 validator - NOT TESTED: official Steinberg validator executed 0 test cases' -or
+                $text -notmatch 'RELEASE: REVIEW WARNINGS' -or
+                $jt.status -ne "WARNING" -or
+                $jt.testerVersion -ne "0.3.0" -or
+                $vt -notmatch 'Result: 0 tests passed, 0 tests failed') {
+              throw "Zero-test validator evidence not classified WARNING, report=$text JSON=$($jt | ConvertTo-Json -Compress)"
+            }
+            $check = Start-Process -FilePath $gui.FullName -ArgumentList "--qa-check-live-warning" -Wait -PassThru
+            if ($check.ExitCode -ne 0) { throw "Production GUI did not classify final zero-validator report as WARNING; exit=$($check.ExitCode)" }
+            Write-Host "[PASS] Native zero-test Steinberg validator -> QA WARN NOT TESTED / JSON WARNING / GUI WARNING"
+          } finally {
+            Remove-Item Env:125A_TESTER_QA_INJECT_VALIDATOR_ZERO_TEST -ErrorAction SilentlyContinue
+            Remove-Item Env:125A_TESTER_QA_STATUS_VST3 -ErrorAction SilentlyContinue
+            Remove-Item Env:125A_PLUGIN_TESTER_REPORT_DIR -ErrorAction SilentlyContinue
+          }
           exit 0
 
       - name: Verify G3 B01 reload validator and worker infrastructure classifications
@@ -358,7 +404,7 @@ jobs:
           $progressTxt = Join-Path $env:125A_PLUGIN_TESTER_REPORT_DIR "125A_Folder_Scan_Progress.txt"
           foreach ($p in @($summaryTxt,$summaryJson,$progressTxt)) { if (-not (Test-Path $p)) { throw "Folder scan output missing: $p" } }
           $text = Get-Content $summaryTxt -Raw
-          foreach ($required in @("Version: 0.2.10","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
+          foreach ($required in @("Version: 0.3.0","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
           $progressText = Get-Content $progressTxt -Raw
           foreach ($required in @("state=complete","total=2","current=2","pass=1","fail=1")) { if (-not $progressText.Contains($required)) { throw "Folder scan progress missing: $required" } }
           $jsonData = Get-Content $summaryJson -Raw | ConvertFrom-Json
@@ -390,7 +436,7 @@ jobs:
           foreach ($entry in @{Stub=$stub;Packer=$packer;Dispatcher=$dispatcher;GUI=$gui;Single=$single;Worker=$worker;ReloadProbe=$reloadProbe;StateProbe=$stateProbe;EditorLifecycleProbe=$editorLifecycleProbe;IOEventProbe=$ioEventProbe;Validator=$validator;ValidatorCore=$validatorCore}.GetEnumerator()) { if (-not $entry.Value) { throw "$($entry.Key) executable not found" } }
           Remove-Item artifact -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force artifact | Out-Null
-          $portable = Join-Path (Get-Location) "artifact\125A_Plugin_Tester_v0.2.10.exe"
+          $portable = Join-Path (Get-Location) "artifact\125A_Plugin_Tester_v0.3.0.exe"
           Copy-Item $stub.FullName $portable -Force
           & $packer.FullName $portable 12501 $gui.FullName 12502 $dispatcher.FullName 12503 $single.FullName 12504 $worker.FullName 12505 $reloadProbe.FullName 12506 $stateProbe.FullName 12507 $ioEventProbe.FullName 12508 $validator.FullName 12509 $validatorCore.FullName 12510 $editorLifecycleProbe.FullName
           if ($LASTEXITCODE -ne 0) { throw "Portable helper embedding failed with exit code $LASTEXITCODE" }
@@ -398,7 +444,7 @@ jobs:
       - name: Verify final portable EXE end to end
         shell: pwsh
         run: |
-          $portable = Get-Item artifact\125A_Plugin_Tester_v0.2.10.exe
+          $portable = Get-Item artifact\125A_Plugin_Tester_v0.3.0.exe
           $good = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_GoodControl.vst3" | Select-Object -First 1
           $badIO = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_BadIO.vst3" | Select-Object -First 1
           if (-not $good) { throw "GoodControl portable fixture not found" }
@@ -444,7 +490,29 @@ jobs:
           if (Get-ChildItem artifact -Recurse -Filter "125A_QA_*.vst3" -ErrorAction SilentlyContinue) { throw "Internal VST3 QA fixtures must not be shipped" }
           $productionExes = @(Get-ChildItem artifact -File -Filter "*.exe")
           if ($productionExes.Count -ne 1) { throw "Portable package must contain exactly one executable; got $($productionExes.Count)" }
-          if ($productionExes[0].Name -ne "125A_Plugin_Tester_v0.2.10.exe") { throw "Unexpected portable executable name: $($productionExes[0].Name)" }
+          if ($productionExes[0].Name -ne "125A_Plugin_Tester_v0.3.0.exe") { throw "Unexpected portable executable name: $($productionExes[0].Name)" }
+          $version = $productionExes[0].VersionInfo
+          if ($version.FileVersion -notmatch '^0\.3\.0(\.0)?$' -or $version.ProductVersion -notmatch '^0\.3\.0(\.0)?$') {
+            throw "V0.3 version mismatch in actual portable EXE: FileVersion=$($version.FileVersion) ProductVersion=$($version.ProductVersion)"
+          }
+          Write-Host "[PASS] Portable filename AND Windows EXE VERSIONINFO confirmed 0.3.0"
+          # The portable stub embeds several native helpers. A correct
+          # VERSIONINFO or top-level GUI title alone cannot prove those
+          # helpers and their per-plugin reports were re-versioned.
+          $raw = [System.IO.File]::ReadAllBytes($productionExes[0].FullName)
+          $latin1 = [System.Text.Encoding]::Latin1.GetString($raw)
+          $oldUnicode = [System.Text.Encoding]::Latin1.GetString(
+            [System.Text.Encoding]::Unicode.GetBytes("0.2.10"))
+          if ($latin1.Contains("0.2.10") -or $latin1.Contains($oldUnicode)) {
+            throw "Stale embedded 0.2.10 version literal found in final portable EXE helper payload"
+          }
+          $newUnicode = [System.Text.Encoding]::Latin1.GetString(
+            [System.Text.Encoding]::Unicode.GetBytes("0.3.0"))
+          if (-not $latin1.Contains("0.3.0") -or -not $latin1.Contains($newUnicode)) {
+            throw "Missing ASCII or UTF-16 0.3.0 literal in final portable EXE"
+          }
+          Write-Host "[PASS] Embedded launcher, worker, GUI and resource version literals verified: no 0.2.10"
+
 
       - name: Upload fixture diagnostics on failure
         if: failure()
@@ -460,5 +528,5 @@ jobs:
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: 125A-Plugin-Tester-v0.2.10-Windows-x64
+          name: 125A-Plugin-Tester-v0.3.0-Windows-x64
           path: artifact/

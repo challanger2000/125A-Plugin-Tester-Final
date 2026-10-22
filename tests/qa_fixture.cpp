@@ -126,6 +126,14 @@ constexpr const char* kPluginName = "125A QA Bad Peer Cleanup";
 const FUID kProcessorUID(0x125A1024, 0x20261022, 0x00000000, 0x00000025);
 const FUID kControllerUID(0x125A2024, 0x20261022, 0x00000000, 0x00000035);
 constexpr const char* kPluginName = "125A QA Bad Event Echo Fields";
+#elif QA_FIXTURE_KIND == 25
+const FUID kProcessorUID(0x125A1025, 0x20261022, 0x00000000, 0x00000026);
+const FUID kControllerUID(0x125A2025, 0x20261022, 0x00000000, 0x00000036);
+constexpr const char* kPluginName = "125A QA Good Dense Multi MIDI";
+#elif QA_FIXTURE_KIND == 26
+const FUID kProcessorUID(0x125A1026, 0x20261022, 0x00000000, 0x00000027);
+const FUID kControllerUID(0x125A2026, 0x20261022, 0x00000000, 0x00000037);
+constexpr const char* kPluginName = "125A QA Bad Dense Multi MIDI";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
@@ -379,8 +387,18 @@ public:
         if (result != kResultOk)
             return result;
 
+#if QA_FIXTURE_KIND != 25 && QA_FIXTURE_KIND != 26
         addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
         addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
+#endif
+#if QA_FIXTURE_KIND == 25 || QA_FIXTURE_KIND == 26
+        // Isolated VST3 MIDI generator with five event output buses and no
+        // audio buses. Its valid 640-event block exceeds the old 64-event
+        // test-host sink; both fixtures share the same bus topology.
+        addEventInput(STR16("QA Dense Multi MIDI In"), 16);
+        for (int bus = 0; bus < 5; ++bus)
+            addEventOutput(STR16("QA Dense Multi MIDI Out"), 1);
+#endif
 #if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22 || QA_FIXTURE_KIND == 24
         addEventInput(STR16("125A QA Event Echo"), 16);
         addEventOutput(STR16("125A QA Event Echo Out"), 16);
@@ -491,6 +509,34 @@ public:
     Sample32 noteLevel_ = 0.0f;
 #endif
     tresult PLUGIN_API process(ProcessData& data) override {
+#if QA_FIXTURE_KIND == 25 || QA_FIXTURE_KIND == 26
+        if (data.inputEvents && data.inputEvents->getEventCount() == 16 &&
+            data.numSamples == 512 && data.outputEvents) {
+#if QA_FIXTURE_KIND == 26
+            // Deliberate processing failure with exactly the same valid
+            // multiple-event-output bus topology as the positive control.
+            return kResultFalse;
+#else
+            // Five event output buses x 128 notes = 640 events in a single
+            // 512-frame block. The host must not enforce a fake 64-event cap.
+            for (int bus = 0; bus < 5; ++bus) {
+                for (int n = 0; n < 128; ++n) {
+                    Event e{};
+                    e.type = Event::kNoteOnEvent;
+                    e.busIndex = bus;
+                    e.sampleOffset = n * 4;
+                    e.noteOn.channel = 0;
+                    e.noteOn.pitch = static_cast<int16>(48 + (n % 24));
+                    e.noteOn.noteId = 1000 + bus * 128 + n;
+                    e.noteOn.velocity = 0.5f;
+                    e.noteOn.length = 8;
+                    if (data.outputEvents->addEvent(e) != kResultTrue)
+                        return kResultFalse;
+                }
+            }
+#endif
+        }
+#endif
 #if QA_FIXTURE_KIND == 14
         void* allocation = ::HeapAlloc(::GetProcessHeap(), 0, 128);
         if (allocation) ::HeapFree(::GetProcessHeap(), 0, allocation);

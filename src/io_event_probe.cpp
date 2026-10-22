@@ -484,7 +484,11 @@ bool runEventStressTyped(IComponent* component,
     }
 
     EventList inputEvents(64);
-    EventList outputEvents(64);
+    // A multi-output MIDI generator can emit events on five or more buses
+    // within ONE 512-frame callback. 64 total events is an artificial host
+    // bottleneck that can make healthy instruments reject our test host.
+    constexpr int32 kOutputEventCapacity = 4096;
+    EventList outputEvents(kOutputEventCapacity);
     const int16 channels = static_cast<int16>(std::max<int32>(1, std::min<int32>(eventInput.channels, 16)));
     constexpr int eventPairs = 8;
 
@@ -575,6 +579,8 @@ bool runEventStressTyped(IComponent* component,
     bool outputEventsValid = true;
     bool echoComplete = true;
     int totalEmitted = 0;
+    std::string firstError;
+    int firstErrorBlock = -1;
     constexpr int kTransportBlocks = 6;
 
     for (int block = 0; block < kTransportBlocks; ++block) {
@@ -591,27 +597,51 @@ bool runEventStressTyped(IComponent* component,
 
         data.inputEvents = block == 0 ? &inputEvents : nullptr;
         if (hasEventOutput) outputEvents.clear();
-        if (processor->process(data) != kResultOk) {
+        const tresult processResult = processor->process(data);
+        if (processResult != kResultOk) {
             processOk = false;
+            firstErrorBlock = block;
+            firstError = "process() returned " + std::to_string(processResult) +
+                " at transport block " + std::to_string(block) +
+                ", event-input-count=" + std::to_string(data.inputEvents ? data.inputEvents->getEventCount() : 0) +
+                ", event-output-count=" + std::to_string(hasEventOutput ? outputEvents.getEventCount() : 0) +
+                ", shared-host-event-capacity=" + std::to_string(kOutputEventCapacity);
             break;
         }
         if (!outputsFinite(outputs)) {
             finite = false;
+            firstErrorBlock = block;
+            firstError = "non-finite audio output at transport block " + std::to_string(block);
             break;
         }
         if (hasEventOutput) {
             const int32 emitted = outputEvents.getEventCount();
             totalEmitted += emitted;
             if (echoContract && block == 0 &&
-                emitted != inputEvents.getEventCount())
+                emitted != inputEvents.getEventCount()) {
                 echoComplete = false;
-            if (echoContract && block > 0 && emitted != 0)
+                if (firstError.empty()) firstError = "controlled echo emitted " +
+                    std::to_string(emitted) + " events instead of " +
+                    std::to_string(inputEvents.getEventCount()) + " in block 0";
+            }
+            if (echoContract && block > 0 && emitted != 0) {
                 echoComplete = false;
+                if (firstError.empty()) firstError = "controlled echo emitted " +
+                    std::to_string(emitted) + " unexpected events in block " + std::to_string(block);
+            }
             for (int32 i = 0; i < emitted; ++i) {
                 Event output{};
-                if (outputEvents.getEvent(i, output) != kResultTrue ||
+                const tresult getEventResult = outputEvents.getEvent(i, output);
+                if (getEventResult != kResultTrue ||
                     output.sampleOffset < 0 || output.sampleOffset >= numSamples) {
                     outputEventsValid = false;
+                    firstErrorBlock = block;
+                    if (firstError.empty()) firstError =
+                        "invalid emitted event at transport block " + std::to_string(block) +
+                        ", output event #" + std::to_string(i) +
+                        ", getEvent()=" + std::to_string(getEventResult) +
+                        ", sampleOffset=" + std::to_string(output.sampleOffset) +
+                        ", expected range 0..511";
                     break;
                 }
                 if (echoContract && block == 0) {
@@ -619,25 +649,54 @@ bool runEventStressTyped(IComponent* component,
                     if (inputEvents.getEvent(i, expected) != kResultTrue ||
                         output.type != expected.type ||
                         output.sampleOffset != expected.sampleOffset ||
-                        output.busIndex != expected.busIndex)
+                        output.busIndex != expected.busIndex) {
                         echoComplete = false;
+                        if (firstError.empty()) firstError =
+                            "controlled echo metadata mismatch at output event #" +
+                            std::to_string(i) + " in transport block 0";
+                    }
                 }
             }
         } else if (echoContract) {
             echoComplete = false;
+            if (firstError.empty()) firstError =
+                "controlled event echo has no output event bus available";
         }
         if (!outputEventsValid) break;
     }
-    if (!echoComplete) {
-        std::cerr << "[FAIL] Event completeness - controlled VST3 echo did not preserve every input event\n";
-    }
-    const bool stopOk = processor->setProcessing(false) == kResultTrue;
-    const bool deactivateOk = component->setActive(false) == kResultTrue;
-    component->activateBus(kEvent, kInput, eventInput.index, false);
+    const tresult stopResult = processor->setProcessing(false);
+    const tresult deactivateResult = component->setActive(false);
+    const tresult inputBusDeactivation = component->activateBus(kEvent, kInput, eventInput.index, false);
+    const bool stopOk = stopResult == kResultTrue;
+    const bool deactivateOk = deactivateResult == kResultTrue;
     const bool restored = restoreDefaultActivation(component, buses);
+    if (!stopOk && firstError.empty()) firstError =
+        "setProcessing(false) rejected at end of event stress; result=" + std::to_string(stopResult);
+    if (!deactivateOk && firstError.empty()) firstError =
+        "setActive(false) rejected at end of event stress; result=" + std::to_string(deactivateResult);
+    if (!restored && firstError.empty()) firstError =
+        "default bus activation could not be restored after event stress";
 
     if (!processOk || !finite || !outputEventsValid || !echoComplete || !stopOk || !deactivateOk || !restored) {
-        std::cerr << "[FAIL] Event stress - dense event processing/lifecycle or output-event validation failed\n";
+        std::cerr << (echoContract && !echoComplete ? "[FAIL] Event completeness - " : "[FAIL] Event stress - ")
+                  << (firstError.empty() ? "unknown failure with incomplete diagnostics" : firstError)
+                  << "\n";
+        std::cerr << "[INFO] Event stress diagnostics -"
+                  << " processOk=" << processOk
+                  << " finiteAudio=" << finite
+                  << " eventOffsetsValid=" << outputEventsValid
+                  << " controlledEchoComplete=" << echoComplete
+                  << " setProcessingStop=" << stopOk
+                  << " setActiveOff=" << deactivateOk
+                  << " restoredBuses=" << restored
+                  << " eventInputDeactivationResult=" << inputBusDeactivation
+                  << " emittedEvents=" << totalEmitted
+                  << " eventOutputBuses=" << std::count_if(buses.begin(), buses.end(), [](const BusSnapshot& b) {
+                      return b.mediaType == kEvent && b.direction == kOutput;
+                  })
+                  << " sinkCapacity=" << kOutputEventCapacity
+                  << " firstErrorBlock=" << firstErrorBlock
+                  << "\n";
         return false;
     }
 
