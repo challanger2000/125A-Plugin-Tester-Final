@@ -659,9 +659,25 @@ bool realtimeTimingMathSelftest() {
     const std::vector<double> samples = {100.0, 200.0, 225.0};
     // A fictional 100,000 us total host wall time must not influence the
     // process mean of 175 us. This is the regression for the former bug.
-    return measuredCallbackMeanUs({}) == 0.0 &&
-           std::abs(measuredCallbackMeanUs(samples) - 175.0) < 1e-12 &&
-           std::abs(measuredCallbackMeanUs(samples) - (100000.0 / 3.0)) > 10000.0;
+    if (measuredCallbackMeanUs({}) != 0.0 ||
+        std::abs(measuredCallbackMeanUs(samples) - 175.0) >= 1e-12 ||
+        std::abs(measuredCallbackMeanUs(samples) - (100000.0 / 3.0)) <= 10000.0)
+        return false;
+
+    // Exercise an actual host-side delay. Its measured wall-clock cost must
+    // remain excluded from the process-only sample vector and its mean.
+    // No hard timing threshold: this selftest must tolerate loaded Windows CI.
+    std::vector<double> processOnlySamples;
+    processOnlySamples.reserve(samples.size());
+    for (const auto sample : samples) {
+        processOnlySamples.push_back(sample);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (std::abs(measuredCallbackMeanUs(processOnlySamples) -
+                     measuredCallbackMeanUs(std::vector<double>(
+                         samples.begin(), samples.begin() + processOnlySamples.size()))) >= 1e-12)
+            return false;
+    }
+    return std::abs(measuredCallbackMeanUs(processOnlySamples) - 175.0) < 1e-12;
 }
 
 template <typename Sample>
