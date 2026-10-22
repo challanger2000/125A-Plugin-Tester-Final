@@ -691,9 +691,18 @@ constexpr ControlledEvent kPartitionEvents[] = {
 struct PartitionObservation {
     bool completed = false;
     std::vector<Sample32> pcm;
-    std::vector<int32> eventTimes;
-    std::vector<int32> noteIds;
-    std::vector<int16> pitches;
+    struct OutputEvent {
+        int32 absoluteSample = -1;
+        int32 localOffset = -1;
+        int32 blockLength = 0;
+        int32 type = -1;
+        int32 bus = -1;
+        int16 channel = -1;
+        int16 pitch = -1;
+        int32 noteId = -1;
+        float velocity = -1.f;
+    };
+    std::vector<OutputEvent> events;
 };
 
 PartitionObservation renderControlledPartition(PluginFactory& factory,
@@ -808,16 +817,32 @@ PartitionObservation renderControlledPartition(PluginFactory& factory,
             for (int32 i = 0; i < outputs.getEventCount(); ++i) {
                 Event emitted{};
                 if (outputs.getEvent(i, emitted) != kResultTrue) { okay = false; break; }
-                observation.eventTimes.push_back(start + emitted.sampleOffset);
+                // The fixture contract promises a complete event echo.
+                // Preserve every semantically significant field BEFORE
+                // collapsing block-relative offsets into absolute samples.
+                if (emitted.sampleOffset < 0 || emitted.sampleOffset >= frames ||
+                    emitted.busIndex != 0) { okay = false; break; }
+                PartitionObservation::OutputEvent observed{};
+                observed.absoluteSample = start + emitted.sampleOffset;
+                observed.localOffset = emitted.sampleOffset;
+                observed.blockLength = frames;
+                observed.type = emitted.type;
+                observed.bus = emitted.busIndex;
                 if (emitted.type == Event::kNoteOnEvent) {
-                    observation.noteIds.push_back(emitted.noteOn.noteId);
-                    observation.pitches.push_back(emitted.noteOn.pitch);
+                    observed.channel = emitted.noteOn.channel;
+                    observed.noteId = emitted.noteOn.noteId;
+                    observed.pitch = emitted.noteOn.pitch;
+                    observed.velocity = emitted.noteOn.velocity;
                 } else if (emitted.type == Event::kNoteOffEvent) {
-                    observation.noteIds.push_back(emitted.noteOff.noteId);
-                    observation.pitches.push_back(emitted.noteOff.pitch);
+                    observed.channel = emitted.noteOff.channel;
+                    observed.noteId = emitted.noteOff.noteId;
+                    observed.pitch = emitted.noteOff.pitch;
+                    observed.velocity = emitted.noteOff.velocity;
                 } else {
                     okay = false;
+                    break;
                 }
+                observation.events.push_back(observed);
             }
         }
     }
@@ -834,7 +859,8 @@ bool runPartitionOracle(PluginFactory& factory,
                         FUnknown* hostContext) {
     const std::string name = classInfo.name().data();
     const bool good = name == "125A QA Good Event Partition";
-    const bool bad = name == "125A QA Bad Event Partition";
+    const bool bad = name == "125A QA Bad Event Partition" ||
+                     name == "125A QA Bad Event Metadata";
     if (!good && !bad) {
         std::cout << "[INFO] SA02 block-partition equivalence - NOT TESTED: "
                      "arbitrary plugin MIDI/audio semantics have no independent oracle\n";
@@ -848,15 +874,31 @@ bool runPartitionOracle(PluginFactory& factory,
     }
     const auto verify = [](const PartitionObservation& x, const char* arrangement) {
         if (x.pcm.size() != 256 ||
-            x.eventTimes.size() != std::size(kPartitionEvents) ||
-            x.noteIds.size() != std::size(kPartitionEvents) ||
-            x.pitches.size() != std::size(kPartitionEvents))
+            x.events.size() != std::size(kPartitionEvents))
             return false;
         for (size_t i = 0; i < std::size(kPartitionEvents); ++i) {
             const auto& expected = kPartitionEvents[i];
-            if (x.eventTimes[i] != expected.absoluteSample ||
-                x.noteIds[i] != expected.noteId || x.pitches[i] != expected.pitch)
+            const auto& actual = x.events[i];
+            const int32 expectedType = expected.noteOn ? Event::kNoteOnEvent : Event::kNoteOffEvent;
+            const int32 expectedOffset = actual.blockLength > 0
+                ? expected.absoluteSample % actual.blockLength : -1;
+            if (actual.blockLength <= 0 || expected.absoluteSample < 0 ||
+                actual.localOffset < 0 || actual.localOffset >= actual.blockLength ||
+                actual.absoluteSample != expected.absoluteSample ||
+                actual.localOffset != expectedOffset || actual.type != expectedType ||
+                actual.bus != 0 || actual.channel != 0 ||
+                actual.noteId != expected.noteId || actual.pitch != expected.pitch ||
+                !std::isfinite(actual.velocity) ||
+                std::fabs(actual.velocity - (expected.noteOn ? expected.velocity : 0.0f)) > 1.0e-6f) {
+                std::cerr << "[INFO] SA02 MIDI field mismatch " << arrangement
+                          << " event=" << i << " sample=" << expected.absoluteSample
+                          << " expectedType=" << expectedType << " actualType=" << actual.type
+                          << " expectedVelocity=" << expected.velocity
+                          << " actualVelocity=" << actual.velocity
+                          << " expectedBus=0 actualBus=" << actual.bus
+                          << " expectedChannel=0 actualChannel=" << actual.channel << "\n";
                 return false;
+            }
         }
         for (size_t sample = 0; sample < 256; ++sample) {
             const float expected = sample < 127 ? 0.25f :
@@ -882,7 +924,7 @@ bool runPartitionOracle(PluginFactory& factory,
     }
     std::cout << "[PASS] SA02 block partition equivalence - two independent fresh-instance "
                  "renders (256 and 128+128) matched 256 non-silent PCM samples/channel "
-                 "and all five absolute MIDI events including the simultaneous ordered pair\n";
+                 "and all five complete MIDI event records (type, bus, channel, velocity, pitch, ID and offset), including simultaneous events\n";
     return true;
 }
 

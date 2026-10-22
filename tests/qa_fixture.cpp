@@ -114,15 +114,23 @@ constexpr const char* kPluginName = "125A QA Bad Peer Views";
 const FUID kProcessorUID(0x125A1021, 0x20261022, 0x00000000, 0x00000022);
 const FUID kControllerUID(0x125A2021, 0x20261022, 0x00000000, 0x00000032);
 constexpr const char* kPluginName = "125A QA Bad Third Restore";
+#elif QA_FIXTURE_KIND == 22
+const FUID kProcessorUID(0x125A1022, 0x20261022, 0x00000000, 0x00000023);
+const FUID kControllerUID(0x125A2022, 0x20261022, 0x00000000, 0x00000033);
+constexpr const char* kPluginName = "125A QA Bad Event Metadata";
+#elif QA_FIXTURE_KIND == 23
+const FUID kProcessorUID(0x125A1023, 0x20261022, 0x00000000, 0x00000024);
+const FUID kControllerUID(0x125A2023, 0x20261022, 0x00000000, 0x00000034);
+constexpr const char* kPluginName = "125A QA Bad Peer Cleanup";
 #else
 #error Unsupported QA_FIXTURE_KIND
 #endif
 
-#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
 
 int gEditorRemovedCount = 0;
 std::atomic<bool> gEditorAttached{false};
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
 // Instrumented test fixture: this registry is accessed on the host control thread.
 std::vector<HWND> gPeerWindows;
 #endif
@@ -143,7 +151,7 @@ public:
             return kInvalidArgument;
         attached_ = true;
         gEditorAttached.store(true);
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         parentWindow_ = static_cast<HWND>(parent);
         gPeerWindows.push_back(parentWindow_);
 #endif
@@ -155,7 +163,13 @@ public:
             return kResultFalse;
         attached_ = false;
         gEditorAttached.store(false);
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 23
+        // Serial single-view release succeeds; only removing A while B
+        // remains attached reports failure. Our new dual-view oracle must
+        // catch this whereas the historical five serial cycles cannot.
+        const bool failDualCleanup = gPeerWindows.size() > 1;
+#endif
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         gPeerWindows.erase(std::remove(gPeerWindows.begin(), gPeerWindows.end(), parentWindow_), gPeerWindows.end());
         parentWindow_ = nullptr;
 #endif
@@ -166,6 +180,9 @@ public:
             volatile int* crash = nullptr;
             *crash = 125;
         }
+#endif
+#if QA_FIXTURE_KIND == 23
+        if (failDualCleanup) return kResultFalse;
 #endif
         return kResultTrue;
     }
@@ -231,7 +248,7 @@ private:
     ViewRect rect_{0, 0, 320, 180};
     IPlugFrame* frame_ = nullptr;
     bool attached_ = false;
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
     HWND parentWindow_ = nullptr;
 #endif
 };
@@ -249,7 +266,7 @@ public:
 
     tresult PLUGIN_API initialize(FUnknown* context) override {
         const auto result = EditController::initialize(context);
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 16 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 16 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         if (result == kResultOk) {
             parameters.addParameter(STR16("125A Reference Gain"), STR16("x"), 0, 0.5,
                                     ParameterInfo::kCanAutomate, kQaReferenceGain);
@@ -279,8 +296,8 @@ public:
     static ParamValue sharedGain_;
 #endif
 
-#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
-    // Fault fixture 20 updates first attached view only.
+#if QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
+    // Fixture 20 updates first attached view only; fixture 23 has bad teardown.
     tresult PLUGIN_API setParamNormalized(ParamID tag, ParamValue value) override {
         const tresult status = EditController::setParamNormalized(tag, value);
         if (status == kResultTrue && tag == kQaReferenceGain) {
@@ -326,7 +343,7 @@ public:
     }
 
     IPlugView* PLUGIN_API createView(FIDString name) override {
-#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20
+#if QA_FIXTURE_KIND == 5 || QA_FIXTURE_KIND == 6 || QA_FIXTURE_KIND == 11 || QA_FIXTURE_KIND == 19 || QA_FIXTURE_KIND == 20 || QA_FIXTURE_KIND == 23
         if (name && std::strcmp(name, ViewType::kEditor) == 0)
             return new QAFixtureView();
 #else
@@ -360,7 +377,7 @@ public:
 
         addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
         addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
-#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
         addEventInput(STR16("125A QA Event Echo"), 16);
         addEventOutput(STR16("125A QA Event Echo Out"), 16);
 #endif
@@ -465,7 +482,7 @@ public:
 #endif
 #endif
 
-#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
     // Bounded fixture state, modified exclusively in process(), not globally.
     Sample32 noteLevel_ = 0.0f;
 #endif
@@ -478,7 +495,7 @@ public:
         if ((callbackCount.fetch_add(1, std::memory_order_relaxed) & 31u) == 31u)
             (void)::WaitForSingleObject(::GetCurrentThread(), 1);
 #endif
-#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+#if QA_FIXTURE_KIND == 12 || QA_FIXTURE_KIND == 13 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
         if (data.inputEvents && data.outputEvents) {
             const int32 total = data.inputEvents->getEventCount();
             for (int32 i = 0; i < total; ++i) {
@@ -486,8 +503,26 @@ public:
                 if (i == total - 1) continue; // Deliberate lost event
 #endif
                 Event event{};
-                if (data.inputEvents->getEvent(i, event) != kResultTrue ||
-                    data.outputEvents->addEvent(event) != kResultTrue)
+                if (data.inputEvents->getEvent(i, event) != kResultTrue)
+                    return kResultFalse;
+#if QA_FIXTURE_KIND == 22
+                // Positive PCM behavior deliberately preserved. Only MIDI
+                // output metadata is wrong in the 128-frame partition:
+                // NoteOff is misreported as NoteOn with same pitch/note ID.
+                if (data.numSamples == 128 && event.type == Event::kNoteOffEvent) {
+                    const auto channel = event.noteOff.channel;
+                    const auto pitch = event.noteOff.pitch;
+                    const auto noteId = event.noteOff.noteId;
+                    event.type = Event::kNoteOnEvent;
+                    event.noteOn.channel = channel;
+                    event.noteOn.pitch = pitch;
+                    event.noteOn.noteId = noteId;
+                    event.noteOn.velocity = 0.0f;
+                    event.noteOn.tuning = 0.f;
+                    event.noteOn.length = 0;
+                }
+#endif
+                if (data.outputEvents->addEvent(event) != kResultTrue)
                     return kResultFalse;
             }
         }
@@ -518,7 +553,7 @@ public:
         if (data.numOutputs <= 0 || data.outputs == nullptr)
             return kResultOk;
 
-#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+#if QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
         // Independent audio oracle: emitted sample equals velocity of most
         // recently arrived NoteOn, NoteOff clears it. Simultaneous notes at
         // one sample use input arrival order. BAD fixture ignores a tied
@@ -551,7 +586,7 @@ public:
 #endif
         for (int32 busIndex = 0; busIndex < data.numOutputs; ++busIndex) {
             auto& bus = data.outputs[busIndex];
-#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+#if QA_FIXTURE_KIND == 9 || QA_FIXTURE_KIND == 10 || QA_FIXTURE_KIND == 21 || QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
             bus.silenceFlags = 0;
 #else
             bus.silenceFlags = bus.numChannels >= 64
@@ -572,7 +607,7 @@ public:
                     const Sample32 gain = static_cast<Sample32>(bypass_ ? 1.0 : 2.0 * gainNormalized_);
                     for (int32 n = 0; n < data.numSamples; ++n)
                         out[n] = (in ? in[n] : Sample32(0)) * gain;
-#elif QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18
+#elif QA_FIXTURE_KIND == 17 || QA_FIXTURE_KIND == 18 || QA_FIXTURE_KIND == 22
                     for (int32 n = 0; n < data.numSamples && n < 8192; ++n)
                         out[n] = referenceAudio[n];
 #else
