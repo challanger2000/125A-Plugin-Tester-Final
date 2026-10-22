@@ -679,9 +679,14 @@ bool realtimeTimingMathSelftest() {
         std::chrono::steady_clock::now() - wallStart).count();
     const double processSumUs = measuredCallbackMeanUs(callbackTimesUs) *
                                 static_cast<double>(callbackTimesUs.size());
+    // Reject accidental wall-time-as-DSP reporting: the host waits must be
+    // measurable and excluded from the reported per-callback mean.
+    const double callbackMeanUs = measuredCallbackMeanUs(callbackTimesUs);
+    const double wallMeanUs = totalWallUs / static_cast<double>(callbackTimesUs.size());
     return callbackTimesUs.size() == 3 &&
            processSumUs >= 0.0 &&
-           totalWallUs - processSumUs >= 30000.0;
+           totalWallUs - processSumUs >= 30000.0 &&
+           wallMeanUs > callbackMeanUs + 10000.0;
 }
 
 template <typename Sample>
