@@ -35,7 +35,7 @@ def main():
     # The approved v0.2.10 release remains immutable. Permit ONLY the
     # explicitly developed 0.3.0 candidate on an ancestry-verified branch.
     current = actual.group(1)
-    if current not in (version, "0.3.0", "0.3.1"):
+    if current not in (version, "0.3.0", "0.3.1", "0.3.2"):
         fail("CMake version is neither approved release nor authorized V0.3 candidate")
     print("TESTER SOURCE VERSION:", current, "| approved baseline:", version)
     if subprocess.run(["git","cat-file","-e",source+"^{commit}"],cwd=ROOT).returncode:

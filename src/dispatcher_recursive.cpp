@@ -209,7 +209,7 @@ int wmain(int argc, wchar_t** argv) {
     std::wstring pathText;
     if (interactive) {
         std::wcout << L"============================================================\n";
-        std::wcout << L"  125A Plugin Tester / Quality Checker v0.3.1\n";
+        std::wcout << L"  125A Plugin Tester / Quality Checker v0.3.2\n";
         std::wcout << L"  Single VST3 or complete VST3 folder\n";
         std::wcout << L"============================================================\n\n";
         std::wcout << L"VST3 plug-in or folder path eingeben:\n> ";
