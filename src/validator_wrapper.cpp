@@ -263,6 +263,23 @@ int wmain(int argc, wchar_t** argv) {
     if (exitCode == 0xFFFFFFFFu)
         return 1;
 
+    // Internal QA-only control: drive the same production wrapper, launcher,
+    // report and GUI using a synthetic zero-test summary. The GOOD fixture
+    // guard prevents accidental injection into third-party plug-ins.
+    wchar_t injectZero[4]{};
+    if (exitCode == 0u && pluginPath.stem() == L"125A_QA_GoodControl" &&
+        GetEnvironmentVariableW(L"125A_TESTER_QA_INJECT_VALIDATOR_ZERO_TEST", injectZero, 4) == 1 &&
+        injectZero[0] == L'1') {
+        std::ofstream output(reportPath, std::ios::binary | std::ios::trunc);
+        if (!output) return 2;
+        output << "125A QA synthetic zero-case validator summary; NOT original validator evidence\n"
+               << "Result: 0 tests passed, 0 tests failed\n";
+        output.flush();
+        if (!output) return 2;
+        output.close();
+        if (output.fail()) return 2;
+    }
+
     if (exitCode == 0u && !reportPath.empty()) {
         // A successful process with zero executed tests is NOT validator PASS.
         // The actual summary is mandatory; a missing/truncated report is
