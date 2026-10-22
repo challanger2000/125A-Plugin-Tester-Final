@@ -350,6 +350,164 @@ ClassProbeResult probeClass(PluginFactory& factory,
 }
 
 
+
+bool probeControlledRecallCycles(PluginFactory& factory,
+                                 const ClassInfo& classInfo,
+                                 FUnknown* hostContext,
+                                 const fs::path& pluginPath) {
+    const std::string name = classInfo.name().data();
+    if (name != "125A QA Functional Gain" && name != "125A QA Bad Third Restore") {
+        std::cout << "[INFO] Repeated semantic state recall - NOT TESTED: "
+                     "no product-independent expected parameter/audio response\n";
+        return true;
+    }
+
+    std::ofstream evidence(ReportPaths::root() /
+        (ReportPaths::baseName(pluginPath) + L"_125A_State_Cycle_Probe.txt"),
+        std::ios::binary | std::ios::trunc);
+    if (evidence)
+        evidence << "Test: repeated inactive state restore A/B/A with audible and controller oracle\n"
+                 << "Scope: controlled known-gain QA fixtures only\n"
+                 << "Input: stereo constant 0.25; expected output: input * (2 * restoredGain)\n";
+
+    bool okay = true;
+    auto component = factory.createInstance<IComponent>(classInfo.ID());
+    if (!component || component->initialize(hostContext) != kResultOk) {
+        std::cerr << "[FAIL] Controlled repeated state recall - fixture component initialization\n";
+        return false;
+    }
+    TUID controllerCID{};
+    ClassProbeResult lifecycle{};
+    ControllerBinding binding;
+    setupController(factory, component.get(),
+                    component->getControllerClassId(controllerCID) == kResultTrue,
+                    controllerCID, hostContext, binding, lifecycle, "Repeated recall");
+    IEditController* controller = binding.active();
+    IAudioProcessor* processor = nullptr;
+    if (!controller ||
+        component->queryInterface(IAudioProcessor::iid, reinterpret_cast<void**>(&processor)) != kResultTrue ||
+        !processor) {
+        okay = false;
+    }
+
+    if (okay) {
+        ProcessSetup setup{};
+        setup.processMode = kRealtime;
+        setup.symbolicSampleSize = kSample32;
+        setup.sampleRate = 48000.0;
+        setup.maxSamplesPerBlock = 64;
+        okay = processor->canProcessSampleSize(kSample32) == kResultTrue &&
+               processor->setupProcessing(setup) == kResultTrue &&
+               component->activateBus(kAudio, kInput, 0, true) == kResultTrue &&
+               component->activateBus(kAudio, kOutput, 0, true) == kResultTrue;
+    }
+
+    constexpr ParamID kGain = 0x125A0100;
+    constexpr double epsilon = 2.0e-6;
+    const double steps[] = {0.20, 0.80, 0.20};
+    for (int cycle = 0; cycle < 3 && okay; ++cycle) {
+        const double expectedGain = steps[cycle];
+        const uint32 bypass = 0;
+        int32 bytesWritten = 0;
+        MemoryStream inputState;
+        okay = inputState.write(const_cast<double*>(&expectedGain),
+                                static_cast<int32>(sizeof(expectedGain)), &bytesWritten) == kResultTrue &&
+               bytesWritten == static_cast<int32>(sizeof(expectedGain));
+        bytesWritten = 0;
+        okay = okay && inputState.write(const_cast<uint32*>(&bypass),
+                       static_cast<int32>(sizeof(bypass)), &bytesWritten) == kResultTrue &&
+               bytesWritten == static_cast<int32>(sizeof(bypass));
+        inputState.seek(0, IBStream::kIBSeekSet, nullptr);
+        // setState + getState run while inactive, not during process().
+        okay = okay && component->setState(&inputState) == kResultTrue;
+        MemoryStream stateAfter;
+        okay = okay && component->getState(&stateAfter) == kResultTrue;
+        stateAfter.seek(0, IBStream::kIBSeekSet, nullptr);
+        double storedGain = -1.;
+        uint32 storedBypass = 999;
+        int32 received = 0;
+        okay = okay && stateAfter.read(&storedGain, sizeof(storedGain), &received) == kResultTrue &&
+               received == sizeof(storedGain);
+        received = 0;
+        okay = okay && stateAfter.read(&storedBypass, sizeof(storedBypass), &received) == kResultTrue &&
+               received == sizeof(storedBypass);
+
+        inputState.seek(0, IBStream::kIBSeekSet, nullptr);
+        const bool controllerAccepted = okay && controller->setComponentState(&inputState) == kResultTrue;
+        const double controllerGain = controllerAccepted ? controller->getParamNormalized(kGain) : -1.;
+
+        Sample32 inputLeft[64]{}, inputRight[64]{};
+        Sample32 outputLeft[64]{}, outputRight[64]{};
+        std::fill_n(inputLeft, 64, 0.25f);
+        std::fill_n(inputRight, 64, 0.25f);
+        Sample32* inputPtrs[] = {inputLeft, inputRight};
+        Sample32* outputPtrs[] = {outputLeft, outputRight};
+        AudioBusBuffers inputBus{}, outputBus{};
+        inputBus.numChannels = outputBus.numChannels = 2;
+        inputBus.channelBuffers32 = inputPtrs;
+        inputBus.silenceFlags = 0;
+        outputBus.channelBuffers32 = outputPtrs;
+        outputBus.silenceFlags = 0;
+        ProcessData data{};
+        data.processMode = kRealtime;
+        data.symbolicSampleSize = kSample32;
+        data.numSamples = 64;
+        data.numInputs = data.numOutputs = 1;
+        data.inputs = &inputBus;
+        data.outputs = &outputBus;
+        bool activated = false, started = false;
+        if (okay && component->setActive(true) == kResultTrue) {
+            activated = true;
+            if (processor->setProcessing(true) == kResultTrue) {
+                started = true;
+                okay = processor->process(data) == kResultTrue;
+            } else {
+                okay = false;
+            }
+        } else {
+            okay = false;
+        }
+        const float actualAudio = outputLeft[0];
+        if (started && processor->setProcessing(false) != kResultTrue) okay = false;
+        if (activated && component->setActive(false) != kResultTrue) okay = false;
+
+        const float expectedAudio = static_cast<float>(0.25 * 2.0 * expectedGain);
+        const bool outputCorrect = std::all_of(std::begin(outputLeft), std::end(outputLeft),
+                                  [&](float sample) { return std::isfinite(sample) &&
+                                      std::fabs(sample - expectedAudio) <= epsilon; }) &&
+                                   std::all_of(std::begin(outputRight), std::end(outputRight),
+                                  [&](float sample) { return std::isfinite(sample) &&
+                                      std::fabs(sample - expectedAudio) <= epsilon; });
+        const bool cyclePassed = okay && controllerAccepted &&
+            std::fabs(storedGain - expectedGain) <= epsilon && storedBypass == 0 &&
+            std::fabs(controllerGain - expectedGain) <= epsilon && outputCorrect;
+        if (evidence) {
+            evidence << "Cycle: " << (cycle + 1) << "\n"
+                     << "Expected gain: " << expectedGain << "\n"
+                     << "Serialized gain: " << storedGain << "\n"
+                     << "Controller gain: " << controllerGain << "\n"
+                     << "Expected PCM: " << expectedAudio << "\n"
+                     << "Observed PCM: " << actualAudio << "\n"
+                     << "Result: " << (cyclePassed ? "PASS" : "FAIL") << "\n\n";
+            evidence.flush();
+        }
+        std::cout << (cyclePassed ? "[PASS]" : "[FAIL]")
+                  << " Controlled repeated state recall - cycle " << (cycle + 1)
+                  << " expected gain=" << expectedGain
+                  << " observed DSP=" << actualAudio
+                  << " controller=" << controllerGain
+                  << " serialized=" << storedGain << "\n";
+        if (!cyclePassed) okay = false;
+    }
+
+    if (processor) processor->release();
+    teardownController(binding, lifecycle, "Repeated recall");
+    if (component->terminate() != kResultTrue) okay = false;
+    component.reset();
+    if (lifecycle.warning) okay = false;
+    return okay;
+}
+
 struct IsolationObservation {
     bool exercised = false;
     bool warning = false;
@@ -551,6 +709,8 @@ int main(int argc, char** argv) {
         if (classResult.hadState)
             ++statefulClasses;
         warning = warning || classResult.warning;
+        if (!probeControlledRecallCycles(factory, classInfo, hostContext, pluginPath))
+            return 1;
         const auto isolation = probeConcurrentControllerInstances(factory, classInfo, hostContext);
         if (instanceEvidence) {
             instanceEvidence << "Class: " << classInfo.name().data() << "\n"
