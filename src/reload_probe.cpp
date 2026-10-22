@@ -122,6 +122,16 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+    // Controlled internal negative test. The plugin remains healthy; only
+    // the reload-probe infrastructure reports a normal child exit 2.
+    wchar_t injectValue[4]{};
+    if (pluginPath.stem() == L"125A_QA_GainReference" &&
+        GetEnvironmentVariableW(L"125A_TESTER_QA_INJECT_RELOAD_INFRA_ERROR",
+                                injectValue, 4) == 1 && injectValue[0] == L'1') {
+        std::cerr << "[INFO] Reload QA synthetic infrastructure exit 2 after report preflight\n";
+        return 2;
+    }
+
     for (int cycle = 1; cycle <= kReloadCycles; ++cycle) {
         if (!runCycle(pluginPath, cycle)) {
             std::cerr.flush();
