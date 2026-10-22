@@ -465,37 +465,40 @@ class StageReport {
 public:
     explicit StageReport(const fs::path& pluginPath)
     : out_(ReportPaths::editorLifecycle(pluginPath), std::ios::binary | std::ios::trunc) {
-        if (out_) {
-            out_ << "125A Plugin Tester / Editor Lifecycle Probe\n";
-            out_ << "Version: 0.2.10\n";
-            out_ << "Plugin: " << pluginPath.string() << "\n\n";
+        if (!out_) { failed_ = true; return; }
+        out_ << "125A Plugin Tester / Editor Lifecycle Probe\n"
+             << "Version: 0.2.10\n"
+             << "Plugin: " << pluginPath.string() << "\n\n";
+        out_.flush();
+        if (!out_) failed_ = true;
+    }
+
+    void mark(const std::string& line) { append("Stage: ", line); }
+    void result(const std::string& line) { append("Result: ", line); }
+
+    bool good() const { return !failed_; }
+    bool finish() {
+        if (out_.is_open()) {
             out_.flush();
+            if (!out_) failed_ = true;
+            out_.close();
+            if (out_.fail()) failed_ = true;
         }
-    }
-
-    void mark(const std::string& text) {
-        if (!out_)
-            return;
-        out_ << "Stage: " << text << "\n";
-        out_.flush();
-    }
-
-    void result(const std::string& text) {
-        if (!out_)
-            return;
-        out_ << "Result: " << text << "\n";
-        out_.flush();
+        return !failed_;
     }
 
 private:
+    void append(const char* prefix, const std::string& line) {
+        if (failed_) return;
+        out_ << prefix << line << "\n";
+        out_.flush();
+        if (!out_) failed_ = true;
+    }
     std::ofstream out_;
+    bool failed_ = false;
 };
 
-int runEditorLifecycle(const fs::path& pluginPath) {
-    std::error_code reportEc;
-    if (!ReportPaths::ensureRoot(reportEc))
-        return 2;
-    StageReport stage(pluginPath);
+int runEditorLifecycleCore(const fs::path& pluginPath, StageReport& stage) {
     stage.mark("module load");
 
     std::string loadError;
@@ -807,6 +810,22 @@ int runEditorLifecycle(const fs::path& pluginPath) {
     std::cout << "[PASS] Editor lifecycle / GUI runtime - " << kEditorCycles
               << " open/runtime/close cycles completed for each editor class\n";
     return 0;
+}
+
+int runEditorLifecycle(const fs::path& pluginPath) {
+    std::error_code reportEc;
+    if (!ReportPaths::ensureRoot(reportEc)) return 2;
+    StageReport stage(pluginPath);
+    if (!stage.good()) {
+        std::cerr << "[INFO] Editor evidence INCONCLUSIVE - cannot open report\n";
+        return 2;
+    }
+    const int coreResult = runEditorLifecycleCore(pluginPath, stage);
+    if (!stage.finish()) {
+        std::cerr << "[INFO] Editor evidence INCONCLUSIVE - report flush/close failed\n";
+        return 2;
+    }
+    return coreResult;
 }
 
 } // namespace
