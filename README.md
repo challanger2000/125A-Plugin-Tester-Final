@@ -1,6 +1,22 @@
 # 125A Plugin Tester / Quality Checker
 
-**CURRENT FINAL SOURCE: v0.2.9 — this is the authoritative Final repository state.**
+## Current version navigation (verified 2026-10-26)
+
+**Do not treat the default `main` branch as the newest Plugin Tester version.** Distinguish release, development candidate, and local archives:
+
+| Status | Version | Source and evidence |
+|---|---|---|
+| **Latest published GitHub FINAL release** | **v0.2.10** | [Release](https://github.com/challanger2000/125A-Plugin-Tester-Final/releases/tag/v0.2.10), source `ec2db65b9b9dbce2b7a5d146cb54869c9ad82e6d`, [Windows QA SUCCESS](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/38744097119) |
+| **Newest confirmed Windows QA development candidate (not a published release)** | **v0.3.2** | [Development branch](https://github.com/challanger2000/125A-Plugin-Tester-Final/tree/fix/v0.3.2-mixfx-realtime-evidence), source [`91c975536a45190085304dcc28a43d93ff56ca88`](https://github.com/challanger2000/125A-Plugin-Tester-Final/commit/91c975536a45190085304dcc28a43d93ff56ca88), [Windows Actions #85 SUCCESS](https://github.com/challanger2000/125A-Plugin-Tester-Final/actions/runs/39823684764), artifact `125A-Plugin-Tester-v0.3.2-Windows-x64` |
+| **Default `main` source** | **v0.2.9** | Historical stable code snapshot; **not** the newest tested candidate or latest published release |
+
+**Owner-reported local ZIP:** `125A_Plugin_Tester_V0.3.2_Windows_mit_Handbuch.zip`. Its exact contents and SHA-256 have not been provided/compared to the Windows Actions artifact; do not claim binary identity or a separate GitHub release based only on the filename.
+
+See [CURRENT.md](CURRENT.md) for exact pins and verification rules, and [AGENTS.md](AGENTS.md) for mandatory Codex/agent entry instructions. The **remaining README below documents the older v0.2.9 code on `main`**; do not use it alone to select the latest tester.
+
+---
+
+
 
 Console-based VST3 quality checker for Windows x64. It is designed for 125A internal QA and for general technical checks of third-party VST3 plug-ins.
 
