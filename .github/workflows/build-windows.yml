@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence, fix/callback-api-per-function-diagnostics]
   workflow_dispatch:
 
 concurrency:
@@ -126,7 +126,7 @@ jobs:
             if ($ioText.Contains("Result: FAIL") -and $ioText.Contains("FirstFailure: None")) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe reported FAIL without a concrete first failure" }
             if ($requiredIoText -and -not $ioText.Contains($requiredIoText)) { Dump-FixtureDiagnostics $stem; throw "$name I/O probe did not contain expected evidence: $requiredIoText" }
             $editorText = Get-Content $editorProbe.FullName -Raw
-            if (-not $editorText.Contains("Version: 0.3.2")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
+            if (-not $editorText.Contains("Version: 0.3.3")) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe has wrong tester version" }
             if ($requiredEditorText -and -not $editorText.Contains($requiredEditorText)) { Dump-FixtureDiagnostics $stem; throw "$name editor lifecycle probe did not contain expected evidence: $requiredEditorText" }
             $jsonData = Get-Content $json.FullName -Raw | ConvertFrom-Json
             if ($jsonData.schemaVersion -ne 1) { throw "$name JSON schemaVersion was not 1" }
@@ -149,6 +149,25 @@ jobs:
           Run-Fixture "125A_QA_BadMissingEvent" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "[FAIL] Event completeness"
           Run-Fixture "125A_QA_BadCallbackHeap" 1 "FAIL" "[FAIL] Callback API tracing"
           Run-Fixture "125A_QA_BadCallbackLock" 0 "WARNING" "[WARN] Callback API tracing"
+          # Reject a generic aggregate-only warning: require independently
+          # reported function names with individual observed callback counts.
+          $heapReport = Find-Report "125A_QA_BadCallbackHeap" "_125A_QA_Report.txt"
+          $lockReport = Find-Report "125A_QA_BadCallbackLock" "_125A_QA_Report.txt"
+          if (-not $heapReport -or -not $lockReport) { throw "Callback API fixture reports missing" }
+          $heapText = Get-Content $heapReport.FullName -Raw
+          $lockText = Get-Content $lockReport.FullName -Raw
+          if ($heapText -notmatch 'HeapAlloc=[1-9][0-9]*' -and
+              $heapText -notmatch 'HeapReAlloc=[1-9][0-9]*' -and
+              $heapText -notmatch 'VirtualAlloc=[1-9][0-9]*') {
+            throw "Callback heap fixture has no nonzero per-API heap evidence"
+          }
+          if ($lockText -notmatch 'EnterCriticalSection=[1-9][0-9]*' -and
+              $lockText -notmatch 'WaitForSingleObject=[1-9][0-9]*' -and
+              $lockText -notmatch 'WaitForSingleObjectEx=[1-9][0-9]*') {
+            throw "Callback lock fixture has no nonzero per-API lock evidence"
+          }
+          Write-Host "Callback named-API counters positive/negative fixtures PASS"
+
           Run-Fixture "125A_QA_BadSharedController" 1 "FAIL" "[FAIL] Fresh-instance state verification"
           Run-Fixture "125A_QA_GoodEventPartition" 0 "PASS" "[PASS] I/O, sidechain and event isolation" "[PASS] SA02 block partition equivalence"
           Run-Fixture "125A_QA_BadEventPartition" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "[FAIL] SA02 block partition equivalence"
@@ -294,7 +313,7 @@ jobs:
             if ($text -notmatch '\[WARN\] Steinberg VST3 validator - NOT TESTED: official Steinberg validator executed 0 test cases' -or
                 $text -notmatch 'RELEASE: REVIEW WARNINGS' -or
                 $jt.status -ne "WARNING" -or
-                $jt.testerVersion -ne "0.3.2" -or
+                $jt.testerVersion -ne "0.3.3" -or
                 $vt -notmatch 'Result: 0 tests passed, 0 tests failed') {
               throw "Zero-test validator evidence not classified WARNING, report=$text JSON=$($jt | ConvertTo-Json -Compress)"
             }
@@ -436,7 +455,7 @@ jobs:
           $progressTxt = Join-Path $env:125A_PLUGIN_TESTER_REPORT_DIR "125A_Folder_Scan_Progress.txt"
           foreach ($p in @($summaryTxt,$summaryJson,$progressTxt)) { if (-not (Test-Path $p)) { throw "Folder scan output missing: $p" } }
           $text = Get-Content $summaryTxt -Raw
-          foreach ($required in @("Version: 0.3.2","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
+          foreach ($required in @("Version: 0.3.3","FOUND: 2","PASS: 1","WARNING: 0","FAIL: 1","INCONCLUSIVE: 0","[PASS]","[FAIL]")) { if (-not $text.Contains($required)) { throw "Folder scan summary missing: $required" } }
           $progressText = Get-Content $progressTxt -Raw
           foreach ($required in @("state=complete","total=2","current=2","pass=1","fail=1")) { if (-not $progressText.Contains($required)) { throw "Folder scan progress missing: $required" } }
           $jsonData = Get-Content $summaryJson -Raw | ConvertFrom-Json
@@ -468,7 +487,7 @@ jobs:
           foreach ($entry in @{Stub=$stub;Packer=$packer;Dispatcher=$dispatcher;GUI=$gui;Single=$single;Worker=$worker;ReloadProbe=$reloadProbe;StateProbe=$stateProbe;EditorLifecycleProbe=$editorLifecycleProbe;IOEventProbe=$ioEventProbe;Validator=$validator;ValidatorCore=$validatorCore}.GetEnumerator()) { if (-not $entry.Value) { throw "$($entry.Key) executable not found" } }
           Remove-Item artifact -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force artifact | Out-Null
-          $portable = Join-Path (Get-Location) "artifact\125A_Plugin_Tester_v0.3.2.exe"
+          $portable = Join-Path (Get-Location) "artifact\125A_Plugin_Tester_v0.3.3.exe"
           Copy-Item $stub.FullName $portable -Force
           & $packer.FullName $portable 12501 $gui.FullName 12502 $dispatcher.FullName 12503 $single.FullName 12504 $worker.FullName 12505 $reloadProbe.FullName 12506 $stateProbe.FullName 12507 $ioEventProbe.FullName 12508 $validator.FullName 12509 $validatorCore.FullName 12510 $editorLifecycleProbe.FullName
           if ($LASTEXITCODE -ne 0) { throw "Portable helper embedding failed with exit code $LASTEXITCODE" }
@@ -476,7 +495,7 @@ jobs:
       - name: Verify final portable EXE end to end
         shell: pwsh
         run: |
-          $portable = Get-Item artifact\125A_Plugin_Tester_v0.3.2.exe
+          $portable = Get-Item artifact\125A_Plugin_Tester_v0.3.3.exe
           $good = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_GoodControl.vst3" | Select-Object -First 1
           $badIO = Get-ChildItem build -Recurse -Directory -Filter "125A_QA_BadIO.vst3" | Select-Object -First 1
           if (-not $good) { throw "GoodControl portable fixture not found" }
@@ -522,12 +541,12 @@ jobs:
           if (Get-ChildItem artifact -Recurse -Filter "125A_QA_*.vst3" -ErrorAction SilentlyContinue) { throw "Internal VST3 QA fixtures must not be shipped" }
           $productionExes = @(Get-ChildItem artifact -File -Filter "*.exe")
           if ($productionExes.Count -ne 1) { throw "Portable package must contain exactly one executable; got $($productionExes.Count)" }
-          if ($productionExes[0].Name -ne "125A_Plugin_Tester_v0.3.2.exe") { throw "Unexpected portable executable name: $($productionExes[0].Name)" }
+          if ($productionExes[0].Name -ne "125A_Plugin_Tester_v0.3.3.exe") { throw "Unexpected portable executable name: $($productionExes[0].Name)" }
           $version = $productionExes[0].VersionInfo
-          if ($version.FileVersion -notmatch '^0\.3\.2(\.0)?$' -or $version.ProductVersion -notmatch '^0\.3\.2(\.0)?$') {
+          if ($version.FileVersion -notmatch '^0\.3\.3(\.0)?$' -or $version.ProductVersion -notmatch '^0\.3\.3(\.0)?$') {
             throw "V0.3 version mismatch in actual portable EXE: FileVersion=$($version.FileVersion) ProductVersion=$($version.ProductVersion)"
           }
-          Write-Host "[PASS] Portable filename AND Windows EXE VERSIONINFO confirmed 0.3.2"
+          Write-Host "[PASS] Portable filename AND Windows EXE VERSIONINFO confirmed 0.3.3"
           # The portable stub embeds several native helpers. A correct
           # VERSIONINFO or top-level GUI title alone cannot prove those
           # helpers and their per-plugin reports were re-versioned.
@@ -539,9 +558,9 @@ jobs:
             throw "Stale embedded 0.2.10 version literal found in final portable EXE helper payload"
           }
           $newUnicode = [System.Text.Encoding]::Latin1.GetString(
-            [System.Text.Encoding]::Unicode.GetBytes("0.3.2"))
-          if (-not $latin1.Contains("0.3.2") -or -not $latin1.Contains($newUnicode)) {
-            throw "Missing ASCII or UTF-16 0.3.2 literal in final portable EXE"
+            [System.Text.Encoding]::Unicode.GetBytes("0.3.3"))
+          if (-not $latin1.Contains("0.3.3") -or -not $latin1.Contains($newUnicode)) {
+            throw "Missing ASCII or UTF-16 0.3.3 literal in final portable EXE"
           }
           Write-Host "[PASS] Embedded launcher, worker, GUI and resource version literals verified: no 0.2.10"
 
@@ -560,5 +579,5 @@ jobs:
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: 125A-Plugin-Tester-v0.3.2-Windows-x64
+          name: 125A-Plugin-Tester-v0.3.3-Windows-x64
           path: artifact/

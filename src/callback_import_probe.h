@@ -17,6 +17,9 @@ namespace CallbackImportProbe {
 inline thread_local bool active = false;
 inline thread_local uint64_t heapCalls = 0;
 inline thread_local uint64_t blockingCalls = 0;
+// Fixed-size counters: callback hooks never allocate or format strings.
+// Order corresponds to apiHooks below.
+inline thread_local std::array<uint64_t, 6> callsByApi{};
 using HeapAllocFn = LPVOID (WINAPI*)(HANDLE,DWORD,SIZE_T);
 using HeapReAllocFn = LPVOID (WINAPI*)(HANDLE,DWORD,LPVOID,SIZE_T);
 using VirtualAllocFn = LPVOID (WINAPI*)(LPVOID,SIZE_T,DWORD,DWORD);
@@ -30,27 +33,27 @@ inline EnterCSFn originalEnterCS = nullptr;
 inline WaitFn originalWait = nullptr;
 inline WaitExFn originalWaitEx = nullptr;
 inline LPVOID WINAPI hookedHeapAlloc(HANDLE h,DWORD f,SIZE_T n) {
-    if (active) ++heapCalls;
+    if (active) { ++heapCalls; ++callsByApi[0]; }
     return originalHeapAlloc(h,f,n);
 }
 inline LPVOID WINAPI hookedHeapReAlloc(HANDLE h,DWORD f,LPVOID p,SIZE_T n) {
-    if (active) ++heapCalls;
+    if (active) { ++heapCalls; ++callsByApi[1]; }
     return originalHeapReAlloc(h,f,p,n);
 }
 inline LPVOID WINAPI hookedVirtualAlloc(LPVOID p,SIZE_T n,DWORD t,DWORD f) {
-    if (active) ++heapCalls;
+    if (active) { ++heapCalls; ++callsByApi[2]; }
     return originalVirtualAlloc(p,n,t,f);
 }
 inline void WINAPI hookedEnterCS(LPCRITICAL_SECTION p) {
-    if (active) ++blockingCalls; // attempted blocking API, not proven contention
+    if (active) { ++blockingCalls; ++callsByApi[3]; } // attempted blocking API, not proven contention
     originalEnterCS(p);
 }
 inline DWORD WINAPI hookedWait(HANDLE h,DWORD timeout) {
-    if (active && timeout != 0) ++blockingCalls;
+    if (active && timeout != 0) { ++blockingCalls; ++callsByApi[4]; }
     return originalWait(h,timeout);
 }
 inline DWORD WINAPI hookedWaitEx(HANDLE h,DWORD timeout,BOOL alertable) {
-    if (active && timeout != 0) ++blockingCalls;
+    if (active && timeout != 0) { ++blockingCalls; ++callsByApi[5]; }
     return originalWaitEx(h,timeout,alertable);
 }
 struct Hook {
@@ -67,7 +70,12 @@ inline std::array<Hook,6> apiHooks{{
     {"WaitForSingleObjectEx",reinterpret_cast<void*>(&hookedWaitEx),reinterpret_cast<void**>(&originalWaitEx)}
 }};
 struct Patch { void** location; void* saved; };
-struct Results { uint64_t allocations=0, blockingApis=0; size_t patchedImports=0; bool active=false; };
+struct Results {
+    uint64_t allocations=0, blockingApis=0;
+    size_t patchedImports=0;
+    bool active=false;
+    std::array<uint64_t, 6> callsByApi{};
+};
 class ImportedApis {
 public:
     explicit ImportedApis(const std::wstring& name) {
@@ -135,11 +143,11 @@ private:
 };
 class Scope {
 public:
-    explicit Scope(bool enabled):enabled_(enabled){if(enabled_){heapCalls=0;blockingCalls=0;active=true;}}
+    explicit Scope(bool enabled):enabled_(enabled){if(enabled_){heapCalls=0;blockingCalls=0;callsByApi.fill(0);active=true;}}
     ~Scope(){active=false;}
     Results finish(size_t imports) {
         active=false;
-        return {heapCalls,blockingCalls,imports,enabled_};
+        return {heapCalls,blockingCalls,imports,enabled_,callsByApi};
     }
 private: bool enabled_;
 };
