@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence, fix/callback-api-per-function-diagnostics]
   workflow_dispatch:
 
 concurrency:
@@ -149,6 +149,25 @@ jobs:
           Run-Fixture "125A_QA_BadMissingEvent" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "[FAIL] Event completeness"
           Run-Fixture "125A_QA_BadCallbackHeap" 1 "FAIL" "[FAIL] Callback API tracing"
           Run-Fixture "125A_QA_BadCallbackLock" 0 "WARNING" "[WARN] Callback API tracing"
+          # Reject a generic aggregate-only warning: require independently
+          # reported function names with individual observed callback counts.
+          $heapReport = Find-Report "125A_QA_BadCallbackHeap" "_125A_QA_Report.txt"
+          $lockReport = Find-Report "125A_QA_BadCallbackLock" "_125A_QA_Report.txt"
+          if (-not $heapReport -or -not $lockReport) { throw "Callback API fixture reports missing" }
+          $heapText = Get-Content $heapReport.FullName -Raw
+          $lockText = Get-Content $lockReport.FullName -Raw
+          if ($heapText -notmatch 'HeapAlloc=[1-9][0-9]*' -and
+              $heapText -notmatch 'HeapReAlloc=[1-9][0-9]*' -and
+              $heapText -notmatch 'VirtualAlloc=[1-9][0-9]*') {
+            throw "Callback heap fixture has no nonzero per-API heap evidence"
+          }
+          if ($lockText -notmatch 'EnterCriticalSection=[1-9][0-9]*' -and
+              $lockText -notmatch 'WaitForSingleObject=[1-9][0-9]*' -and
+              $lockText -notmatch 'WaitForSingleObjectEx=[1-9][0-9]*') {
+            throw "Callback lock fixture has no nonzero per-API lock evidence"
+          }
+          Write-Host "Callback named-API counters positive/negative fixtures PASS"
+
           Run-Fixture "125A_QA_BadSharedController" 1 "FAIL" "[FAIL] Fresh-instance state verification"
           Run-Fixture "125A_QA_GoodEventPartition" 0 "PASS" "[PASS] I/O, sidechain and event isolation" "[PASS] SA02 block partition equivalence"
           Run-Fixture "125A_QA_BadEventPartition" 1 "FAIL" "[FAIL] I/O, sidechain and event isolation" "[FAIL] SA02 block partition equivalence"
