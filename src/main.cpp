@@ -743,6 +743,7 @@ void runSustainedProcessing(IAudioProcessor* processor,
     // Paced host-like callback scheduling; all sleep/wait work is outside process().
     constexpr int pacedBlocks = 32;
     uint64_t tracedHeap = 0, tracedLocks = 0;
+    std::array<uint64_t, 6> tracedByApi{};
     const auto period = std::chrono::duration<double>(static_cast<double>(numSamples) / 48000.0);
     auto due = std::chrono::steady_clock::now();
     int pacedCallbackOverruns = 0;
@@ -768,6 +769,8 @@ void runSustainedProcessing(IAudioProcessor* processor,
         const auto imported = importedScope.finish(gImportedApiCoverage);
         tracedHeap += imported.allocations;
         tracedLocks += imported.blockingApis;
+        for (size_t apiIndex = 0; apiIndex < tracedByApi.size(); ++apiIndex)
+            tracedByApi[apiIndex] += imported.callsByApi[apiIndex];
         if (processResult != kResultOk || countNonFinite(outputStorage) != 0) {
             report.add(Level::Fail, "Paced realtime (" + sizeLabel + ")",
                        "process failed or output non-finite");
@@ -785,13 +788,20 @@ void runSustainedProcessing(IAudioProcessor* processor,
     if (gImportedApiCoverage == 0)
         report.add(Level::Info, "Callback API tracing (" + sizeLabel + ")",
                    "NOT INSTRUMENTED: target module imports no tracked Win32 APIs");
-    else
+    else {
+        std::ostringstream detail;
+        detail << gImportedApiCoverage << " monitored import slots, "
+               << tracedHeap << " heap API calls, "
+               << tracedLocks << " potentially blocking API calls; per-API:";
+        for (size_t apiIndex = 0; apiIndex < tracedByApi.size(); ++apiIndex)
+            detail << " " << CallbackImportProbe::apiHooks[apiIndex].name
+                   << "=" << tracedByApi[apiIndex];
+        detail << "; EnterCriticalSection counts attempts, not measured contention"
+               << "; WaitForSingleObject(Ex) counts nonzero-timeout attempts, not measured waiting"
+               << "; limited to the tracked DLL import slots (not a complete custom allocator/lock detector)";
         report.add(tracedHeap > 0 ? Level::Fail : tracedLocks > 0 ? Level::Warning : Level::Pass,
-                   "Callback API tracing (" + sizeLabel + ")",
-                   std::to_string(gImportedApiCoverage) + " monitored import slots, " +
-                   std::to_string(tracedHeap) + " heap API calls, " +
-                   std::to_string(tracedLocks) + " potentially blocking API calls; " +
-                   "not a complete custom allocator/lock detector");
+                   "Callback API tracing (" + sizeLabel + ")", detail.str());
+    }
     report.add(pacedCallbackOverruns ? Level::Warning : Level::Pass,
                "Paced realtime (" + sizeLabel + ")",
                std::to_string(pacedBlocks) + " host-paced blocks, max=" +
