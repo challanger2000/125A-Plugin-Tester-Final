@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence, fix/callback-api-per-function-diagnostics, fix/v0.3.3-state-probe-diagnostics, fix/v0.3.3-eii-typed-state-equivalence]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence, fix/callback-api-per-function-diagnostics, fix/v0.3.3-state-probe-diagnostics, fix/v0.3.3-eii-typed-state-equivalence, fix/v0.3.3-eii-bootpending-state]
   workflow_dispatch:
 
 concurrency:
@@ -37,7 +37,7 @@ jobs:
           if (-not $probe) { throw "State probe missing for semantic equivalence self-test" }
           & $probe.FullName --eii-typed-selftest
           if ($LASTEXITCODE -ne 0) { throw "Typed state comparator failed its positive/negative oracle" }
-          Write-Host "Typed state comparison PASS: numeric formatting accepted; path/value changes detected."
+          Write-Host "Typed state comparison PASS: numeric formatting accepted; documented bankpending boot status INFO; path/value/extra-field mutations rejected."
 
       - name: Verify dispatcher classification, guard precedence and report errors
         shell: pwsh

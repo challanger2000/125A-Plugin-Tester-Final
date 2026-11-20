@@ -402,10 +402,17 @@ ClassProbeResult probeClass(PluginFactory& factory,
             std::string_view(sourceState.getData(), static_cast<size_t>(sourceState.getSize())),
             std::string_view(restoredState.getData(), static_cast<size_t>(restoredState.getSize())));
         if (semantics.supported && semantics.equivalent) {
-            std::cout << "[PASS] EII typed state verification - all settings, paths and "
+            if (semantics.bootBankPendingIntroduced)
+                std::cout << "[INFO] EII bank safety - bankpending=1 appeared after firmware boot; "
+                             "sample RAM has not been independently proven committed via original DISK 7. "
+                             "This is NOT proof of bank/audio recall.\n";
+            std::cout << "[PASS] EII typed state verification - all stable settings, paths and "
                          "calibrations equivalent; "
                       << semantics.formatOnlyFields
-                      << " numeric formatting difference(s), no detected setting change\n";
+                      << " numeric formatting difference(s); "
+                      << (semantics.bootBankPendingIntroduced ?
+                          "only documented bankpending boot-safety status was introduced" :
+                          "no detected setting change") << "\n";
         } else {
             std::cout << "[WARN] Semantic state restoration - serialized contents differ";
             if (semantics.supported && !semantics.firstDifferentKey.empty())
