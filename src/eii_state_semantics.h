@@ -110,9 +110,9 @@ inline bool selfTest() {
     auto bootPending=a;
     const auto beforeCalibration=bootPending.find("calibration:");
     if(beforeCalibration==std::string::npos)return false;
-    bootPending.insert(beforeCalibration,"bankpending=1\\n");
+    bootPending.insert(beforeCalibration,"bankpending=1\n");
     auto alteredFilter=state("23.6","C:/ROM");
-    alteredFilter.insert(alteredFilter.find("calibration:"),"bankpending=1\\n");
+    alteredFilter.insert(alteredFilter.find("calibration:"),"bankpending=1\n");
     auto badFlag=bootPending;
     badFlag.replace(badFlag.find("bankpending=1"),
                     std::string("bankpending=1").size(),"bankpending=0");
@@ -122,7 +122,7 @@ inline bool selfTest() {
     return boot.supported && boot.equivalent && boot.bootBankPendingIntroduced &&
         !compare(bootPending,a).equivalent && !compare(a,badFlag).equivalent &&
         !compare(a,alteredFilter).equivalent &&
-        !compare(a,bootPending+"hddpending=1\\n").equivalent &&
+        !compare(a,bootPending+"hddpending=1\n").equivalent &&
         numeric.supported && numeric.equivalent && numeric.formatOnlyFields==1 &&
         compare(a,a).equivalent &&
         !compare(a,state("23.6","C:/ROM")).equivalent &&
