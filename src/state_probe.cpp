@@ -783,7 +783,7 @@ int main(int argc, char** argv) {
         std::cerr << "[INFO] State probe evidence INCONCLUSIVE - cannot create state report\n";
         return 2;
     }
-    std::cout << "Plugin: " << pluginPath.u8string() << "\n";
+    std::cout << "Plugin: " << pluginPath.string() << "\n";
 
     std::string error;
     auto module = Module::create(pluginPath.u8string(), error);

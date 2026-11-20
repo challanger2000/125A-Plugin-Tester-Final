@@ -435,6 +435,38 @@ jobs:
           # QA script itself must return success explicitly.
           exit 0
 
+
+      - name: Test public Emulator II P048 VST3 (no proprietary ROMs)
+        shell: pwsh
+        run: |
+          $tester = Get-ChildItem build -Recurse -File -Filter 125A_Plugin_Tester.exe | Select-Object -First 1
+          if (-not $tester) { throw "Production plugin tester executable missing" }
+          $download = Join-Path (Get-Location) "build\\emulator-ii-public-p048.zip"
+          $unpack = Join-Path (Get-Location) "build\\emulator-ii-public-p048"
+          $url = "https://github.com/challanger2000/125A-Emulator-II-Windows-VST3/releases/download/v0.1.0-rc.1/125A-E-MU-Emulator-II-P048-PUBLIC-VST3-NO-ROM.zip"
+          Invoke-WebRequest -Uri $url -OutFile $download
+          Expand-Archive -Path $download -DestinationPath $unpack -Force
+          $plugin = Get-ChildItem $unpack -Recurse -Directory -Filter "E-MU Emulator II.vst3" | Select-Object -First 1
+          if (-not $plugin) { throw "Public P048 VST3 bundle not found in release ZIP" }
+          $env:125A_PLUGIN_TESTER_REPORT_DIR = Join-Path (Get-Location) "build\\emulator-ii-public-reports"
+          New-Item -ItemType Directory -Force -Path $env:125A_PLUGIN_TESTER_REPORT_DIR | Out-Null
+          & $tester.FullName $plugin.FullName
+          $testerExit = $LASTEXITCODE
+          $trace = Get-ChildItem $env:125A_PLUGIN_TESTER_REPORT_DIR -File -Filter "*_125A_State_Probe.txt" | Select-Object -First 1
+          $summary = Get-ChildItem $env:125A_PLUGIN_TESTER_REPORT_DIR -File -Filter "*_125A_QA_Report.json" | Select-Object -First 1
+          if (-not $trace -or -not $summary) { throw "Emulator II test did not produce complete state and JSON evidence" }
+          $data = Get-Content $summary.FullName -Raw | ConvertFrom-Json
+          Write-Host "E-MU Emulator II P048 ROM-free test status: $($data.status) / exit $testerExit"
+          Write-Host "----- BEGIN EMULATOR-II STATE EVIDENCE -----"
+          Get-Content $trace.FullName | Write-Host
+          Write-Host "----- END EMULATOR-II STATE EVIDENCE -----"
+          if ($data.status -notin @("PASS","WARNING")) { throw "Emulator II P048 ROM-free QA regression: $($data.status)" }
+          if ($testerExit -ne 0) { throw "Emulator II P048 ROM-free tester exit unexpectedly nonzero: $testerExit" }
+          if (-not $data.reports.state -or -not (Test-Path $data.reports.state)) {
+            throw "Emulator II state evidence missing from JSON"
+          }
+          Write-Host "Emulator II ROM-free test completed; state warnings are not suppressed."
+
       - name: Verify serial folder scan and aggregate JSON
         shell: pwsh
         run: |
@@ -579,6 +611,7 @@ jobs:
             build/qa-reports/*
             build/folder-scan-reports/*
             build/portable-reports/*
+            build/emulator-ii-public-reports/*
           if-no-files-found: warn
 
       - name: Upload package
