@@ -17,6 +17,7 @@
 #include <iterator>
 #include <filesystem>
 #include <iostream>
+#include <streambuf>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -28,6 +29,70 @@ namespace {
 
 constexpr int kNotApplicable = 10;
 constexpr int kWarning = 11;
+
+class TeeBuffer final : public std::streambuf {
+public:
+    TeeBuffer(std::streambuf* terminal, std::streambuf* evidence)
+        : terminal_(terminal), evidence_(evidence) {}
+protected:
+    int_type overflow(int_type ch) override {
+        if (traits_type::eq_int_type(ch, traits_type::eof()))
+            return traits_type::not_eof(ch);
+        const auto a = terminal_->sputc(traits_type::to_char_type(ch));
+        const auto b = evidence_->sputc(traits_type::to_char_type(ch));
+        return traits_type::eq_int_type(a, traits_type::eof()) ||
+               traits_type::eq_int_type(b, traits_type::eof())
+            ? traits_type::eof() : ch;
+    }
+    std::streamsize xsputn(const char* bytes, std::streamsize length) override {
+        const auto a = terminal_->sputn(bytes, length);
+        const auto b = evidence_->sputn(bytes, length);
+        evidence_->pubsync(); // preserve the last complete finding on a crash
+        return std::min(a, b);
+    }
+    int sync() override {
+        const int a = terminal_->pubsync();
+        const int b = evidence_->pubsync();
+        return a == 0 && b == 0 ? 0 : -1;
+    }
+private:
+    std::streambuf* terminal_;
+    std::streambuf* evidence_;
+};
+
+// A successful probe now always leaves its full PASS/WARN/FAIL reasoning.
+// Guard_Report is deliberately reserved for infrastructure/crash failures.
+class StateEvidence final {
+public:
+    explicit StateEvidence(const fs::path& path)
+        : file_(path, std::ios::binary | std::ios::trunc),
+          stdoutTee_(std::cout.rdbuf(), file_.rdbuf()),
+          stderrTee_(std::cerr.rdbuf(), file_.rdbuf()) {
+        if (!file_) return;
+        oldOut_ = std::cout.rdbuf(&stdoutTee_);
+        oldErr_ = std::cerr.rdbuf(&stderrTee_);
+        std::cout << "125A Plugin Tester / Fresh-instance State Probe\n"
+                  << "Version: 0.3.3\n"
+                  << "Evidence: exact probe findings; no state/ROM bytes exported\n";
+        std::cout.flush();
+    }
+    ~StateEvidence() {
+        if (!oldOut_) return;
+        std::cout.flush();
+        std::cerr.flush();
+        std::cout.rdbuf(oldOut_);
+        std::cerr.rdbuf(oldErr_);
+    }
+    bool good() const { return file_.good(); }
+    StateEvidence(const StateEvidence&) = delete;
+    StateEvidence& operator=(const StateEvidence&) = delete;
+private:
+    std::ofstream file_;
+    TeeBuffer stdoutTee_, stderrTee_;
+    std::streambuf* oldOut_ = nullptr;
+    std::streambuf* oldErr_ = nullptr;
+};
+
 // Used only on the host/control thread, outside process().
 bool gEvidenceInfrastructureFailure = false;
 
@@ -323,6 +388,15 @@ ClassProbeResult probeClass(PluginFactory& factory,
             hardFailure = true;
             return result;
         }
+        const char* first = sourceState.getData();
+        const char* second = restoredState.getData();
+        const auto overlap = static_cast<size_t>(std::min(sourceState.getSize(), restoredState.getSize()));
+        size_t firstDifference = 0;
+        while (firstDifference < overlap && first[firstDifference] == second[firstDifference])
+            ++firstDifference;
+        std::cout << "[INFO] State comparison - sourceBytes=" << sourceState.getSize()
+                  << " restoredBytes=" << restoredState.getSize()
+                  << " firstDifference=" << firstDifference << " (contents withheld)\n";
         std::cout << "[WARN] Semantic state restoration - re-saved bytes differ; may be volatile serialization rather than semantic loss\n";
         result.warning = true;
     } else {
@@ -698,6 +772,18 @@ int main(int argc, char** argv) {
         std::cerr << "[FAIL] State probe - path does not exist\n";
         return 2;
     }
+
+    std::error_code stateReportError;
+    if (!ReportPaths::ensureRoot(stateReportError)) {
+        std::cerr << "[INFO] State probe evidence INCONCLUSIVE - cannot create report directory\n";
+        return 2;
+    }
+    StateEvidence stateEvidence(ReportPaths::state(pluginPath));
+    if (!stateEvidence.good()) {
+        std::cerr << "[INFO] State probe evidence INCONCLUSIVE - cannot create state report\n";
+        return 2;
+    }
+    std::cout << "Plugin: " << pluginPath.string() << "\n";
 
     std::string error;
     auto module = Module::create(pluginPath.u8string(), error);

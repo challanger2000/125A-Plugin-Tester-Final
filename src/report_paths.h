@@ -116,6 +116,10 @@ inline fs::path multiInstance(const fs::path& pluginPath) {
     return root() / (baseName(pluginPath) + L"_125A_MultiInstance_Probe.txt");
 }
 
+inline fs::path state(const fs::path& pluginPath) {
+    return root() / (baseName(pluginPath) + L"_125A_State_Probe.txt");
+}
+
 inline fs::path stateCycle(const fs::path& pluginPath) {
     return root() / (baseName(pluginPath) + L"_125A_State_Cycle_Probe.txt");
 }

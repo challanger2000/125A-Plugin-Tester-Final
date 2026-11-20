@@ -28,6 +28,7 @@ Console-based VST3 quality checker for Windows x64. It is designed for 125A inte
 - controller component-state synchronization
 - controller private-state roundtrip where available
 - isolated fresh-instance component-state transfer and re-save verification
+- persistent per-plugin `_125A_State_Probe.txt` with exact controller/lifecycle/serialization warnings (Guard_Report is reserved for failures, not normal warnings)
 - fresh-instance controller `setComponentState()` check where a controller is available
 - `IAudioProcessor` availability, latency and tail reporting
 - 32-bit / 64-bit sample-format capability checks
