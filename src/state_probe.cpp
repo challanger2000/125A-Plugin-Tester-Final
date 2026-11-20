@@ -1,4 +1,5 @@
 #include "report_paths.h"
+#include "eii_state_semantics.h"
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/common/memorystream.h"
@@ -397,8 +398,23 @@ ClassProbeResult probeClass(PluginFactory& factory,
         std::cout << "[INFO] State comparison - sourceBytes=" << sourceState.getSize()
                   << " restoredBytes=" << restoredState.getSize()
                   << " firstDifference=" << firstDifference << " (contents withheld)\n";
-        std::cout << "[WARN] Semantic state restoration - re-saved bytes differ; may be volatile serialization rather than semantic loss\n";
-        result.warning = true;
+        const auto semantics=eii_state_semantics::compare(
+            std::string_view(sourceState.getData(), static_cast<size_t>(sourceState.getSize())),
+            std::string_view(restoredState.getData(), static_cast<size_t>(restoredState.getSize())));
+        if (semantics.supported && semantics.equivalent) {
+            std::cout << "[PASS] EII typed state verification - all settings, paths and "
+                         "calibrations equivalent; "
+                      << semantics.formatOnlyFields
+                      << " numeric formatting difference(s), no detected setting change\n";
+        } else {
+            std::cout << "[WARN] Semantic state restoration - serialized contents differ";
+            if (semantics.supported && !semantics.firstDifferentKey.empty())
+                std::cout << "; first materially different key: " << semantics.firstDifferentKey;
+            else
+                std::cout << "; no supported typed equivalence proof";
+            std::cout << " (values withheld)\n";
+            result.warning = true;
+        }
     } else {
         std::cout << "[INFO] Serialized state identity - identical bytes; semantic equivalence remains NOT VERIFIED without independent oracle\n";
     }
@@ -762,6 +778,11 @@ IsolationObservation probeConcurrentControllerInstances(PluginFactory& factory,
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc==2 && std::string(argv[1])=="--eii-typed-selftest") {
+        const bool okay=eii_state_semantics::selfTest();
+        std::cout << (okay ? "[PASS]" : "[FAIL]") << " EII typed-state semantic comparator positive/negative self-test\n";
+        return okay ? 0 : 1;
+    }
     if (argc < 2) {
         std::cerr << "[FAIL] State probe - no VST3 path supplied\n";
         return 2;
