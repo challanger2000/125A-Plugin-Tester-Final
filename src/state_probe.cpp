@@ -388,8 +388,8 @@ ClassProbeResult probeClass(PluginFactory& factory,
             hardFailure = true;
             return result;
         }
-        const auto* first = static_cast<const unsigned char*>(sourceState.getData());
-        const auto* second = static_cast<const unsigned char*>(restoredState.getData());
+        const char* first = sourceState.getData();
+        const char* second = restoredState.getData();
         const auto overlap = static_cast<size_t>(std::min(sourceState.getSize(), restoredState.getSize()));
         size_t firstDifference = 0;
         while (firstDifference < overlap && first[firstDifference] == second[firstDifference])
