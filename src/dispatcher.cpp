@@ -367,6 +367,7 @@ bool writePluginJson(const fs::path& pluginPath, ScanStatus status, int exitCode
     out << "  \"reports\": {\n";
     out << "    \"qa\": \"" << jsonEscape(pathUtf8(ReportPaths::qa(pluginPath))) << "\",\n";
     out << "    \"guard\": \"" << jsonEscape(pathUtf8(ReportPaths::guard(pluginPath))) << "\",\n";
+    out << "    \"state\": \"" << jsonEscape(pathUtf8(ReportPaths::state(pluginPath))) << "\",\n";
     out << "    \"validator\": \"" << jsonEscape(pathUtf8(ReportPaths::validator(pluginPath))) << "\"\n";
     out << "  },\n";
     out << "  \"findings\": [\n";

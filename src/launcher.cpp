@@ -66,6 +66,20 @@ fs::path qaReportPath(const fs::path& pluginPath) {
     return ReportPaths::qa(pluginPath);
 }
 
+std::string firstStateWarning(const fs::path& pluginPath) {
+    std::ifstream in(ReportPaths::state(pluginPath), std::ios::binary);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.rfind("[WARN] ", 0) == 0) {
+            line = line.substr(7);
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (line.size() > 350) line.resize(350);
+            return line;
+        }
+    }
+    return "State probe returned a warning; inspect the State_Probe report for details";
+}
+
 fs::path validatorReportPath(const fs::path& pluginPath) {
     return ReportPaths::validator(pluginPath);
 }
@@ -586,6 +600,7 @@ int wmain(int argc, wchar_t** argv) {
         !clearStaleReport(ReportPaths::ioEvent(pluginPath)) ||
         !clearStaleReport(ReportPaths::editorLifecycle(pluginPath)) ||
         !clearStaleReport(ReportPaths::multiInstance(pluginPath)) ||
+        !clearStaleReport(ReportPaths::state(pluginPath)) ||
         !clearStaleReport(ReportPaths::stateCycle(pluginPath)) ||
         !clearStaleReport(legacyWorkerQaReportPath(pluginPath))) {
         std::wcerr << L"Refusing to start because an old report could be mistaken for the new test result.\n";
@@ -654,6 +669,13 @@ int wmain(int argc, wchar_t** argv) {
                          true);
         waitForEnter(interactive);
         return 1;
+    }
+    std::error_code stateReportEc;
+    if (!fs::is_regular_file(ReportPaths::state(pluginPath), stateReportEc) || stateReportEc) {
+        writeGuardReport(pluginPath, "Fresh-instance state evidence",
+                         "State probe returned without producing its required diagnostic report", true);
+        waitForEnter(interactive);
+        return 2;
     }
 
     std::wcout << L"Editor lifecycle / GUI runtime isolation: ON | Timeout: 180 s\n";
@@ -803,7 +825,7 @@ int wmain(int argc, wchar_t** argv) {
     else if (stateResult == 10)
         stateAnnotated = annotateReport(pluginPath, "INFO", "Fresh-instance state verification", "Not applicable because no component state was available", 0, 0, 0);
     else if (stateResult == 11)
-        stateAnnotated = annotateReport(pluginPath, "WARN", "Fresh-instance state verification", "Component persistence probe completed with persistence/controller/lifecycle warning(s)", 0, 1, 0);
+        stateAnnotated = annotateReport(pluginPath, "WARN", "Fresh-instance state verification", firstStateWarning(pluginPath), 0, 1, 0);
     else if (stateResult == 1)
         stateAnnotated = annotateReport(pluginPath, "FAIL", "Fresh-instance state verification", "Fresh-instance state API, controlled semantic state oracle, or simultaneous-controller-instance isolation failed", 0, 0, 1);
     if (!stateAnnotated)
@@ -862,7 +884,8 @@ int wmain(int argc, wchar_t** argv) {
     const bool editorFailure = editorLifecycleResult == 1 || editorLifecycleResult == 124 || editorLifecycleResult == 126;
     const bool deterministicFailure = workerResult == 1 || stateResult == 1 || editorFailure || ioEventResult == 1 || validatorResult == 1 || isolatedMatrixFailures > 0;
     const int result = deterministicFailure ? 1 : 0;
-    std::wcout << L"\nReport storage: " << ReportPaths::root().wstring() << L'\n';
+    std::wcout << L"\nState probe details: " << ReportPaths::state(pluginPath).wstring() << L'\n';
+    std::wcout << L"Report storage: " << ReportPaths::root().wstring() << L'\n';
     std::wcout << L"Launcher result code: " << result << L'\n';
     waitForEnter(interactive);
     return result;

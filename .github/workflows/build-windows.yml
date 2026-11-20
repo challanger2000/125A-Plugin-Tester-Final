@@ -2,7 +2,7 @@ name: Build 125A Plugin Tester
 
 on:
   push:
-    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence, fix/callback-api-per-function-diagnostics]
+    branches: [main, fix/tester-v0.2.10-nine-audit-findings, release/v0.2.10-final, fix/v0.3-validator-midi-diagnostics, fix/v0.3.1-parameter-text-classification, fix/v0.3.2-mixfx-realtime-evidence, fix/callback-api-per-function-diagnostics, fix/v0.3.3-state-probe-diagnostics]
   workflow_dispatch:
 
 concurrency:
@@ -113,12 +113,16 @@ jobs:
             $json = Find-Report $stem "_125A_QA_Report.json"
             $ioProbe = Find-Report $stem "_125A_IO_Event_Probe.txt"
             $editorProbe = Find-Report $stem "_125A_Editor_Lifecycle_Probe.txt"
+            $stateProbe = Find-Report $stem "_125A_State_Probe.txt"
             if ($actual -ne $expectedExit) { Dump-FixtureDiagnostics $stem; throw "$name returned launcher exit $actual; expected $expectedExit" }
             if ($guard) { Dump-FixtureDiagnostics $stem; throw "$name produced a guard/inconclusive report during a deterministic fixture test" }
             if (-not $report) { Dump-FixtureDiagnostics $stem; throw "$name did not produce the expected QA report" }
             if (-not $json) { Dump-FixtureDiagnostics $stem; throw "$name did not produce the expected JSON report" }
             if (-not $ioProbe) { Dump-FixtureDiagnostics $stem; throw "$name did not produce the structured I/O/event probe report" }
             if (-not $editorProbe) { Dump-FixtureDiagnostics $stem; throw "$name did not produce the structured editor lifecycle probe report" }
+            if (-not $stateProbe) { Dump-FixtureDiagnostics $stem; throw "$name did not produce its required state probe evidence" }
+            $stateText = Get-Content $stateProbe.FullName -Raw
+            if (-not $stateText.Contains("125A Plugin Tester / Fresh-instance State Probe") -or -not $stateText.Contains("Fresh-instance state")) { Dump-FixtureDiagnostics $stem; throw "$name state probe evidence was incomplete" }
             $reportText = Get-Content $report.FullName -Raw
             if (-not $reportText.Contains($requiredReportText)) { Dump-FixtureDiagnostics $stem; throw "$name report did not contain expected evidence: $requiredReportText" }
             $ioText = Get-Content $ioProbe.FullName -Raw
@@ -133,6 +137,7 @@ jobs:
             if ($jsonData.status -ne $expectedStatus) { throw "$name JSON status $($jsonData.status); expected $expectedStatus" }
             if ($jsonData.pluginPath -ne $fixture.FullName) { throw "$name JSON pluginPath mismatch" }
             if (-not $jsonData.pluginId) { throw "$name JSON pluginId missing" }
+            if (-not $jsonData.reports.state -or -not (Test-Path $jsonData.reports.state)) { throw "$name JSON state evidence path missing or invalid" }
             Write-Host "[PASS] $name returned expected exit/status and produced matching TXT + JSON + structured I/O evidence"
           }
 
